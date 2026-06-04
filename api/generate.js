@@ -9,14 +9,14 @@ module.exports = async function handler(req, res) {
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
-  const modelName = process.env.GEMINI_MODEL || 'imagen-3.0-generate-002';
+  const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
 
   if (!apiKey) {
     return res.status(500).json({ error: 'API key not configured' });
   }
 
   try {
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateImages?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -25,39 +25,48 @@ module.exports = async function handler(req, res) {
         'Accept': 'application/json'
       },
       body: JSON.stringify({
-        prompt: prompt,
-        numberOfImages: 1,
-        aspectRatio: "1:1",
-        outputMimeType: "image/png"
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"]
+        }
       }),
     });
 
     const responseText = await response.text();
-    console.log('Status:', response.status, 'Length:', responseText.length);
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'API failed', response: responseText.substring(0, 300) });
+      return res.status(response.status).json({ 
+        error: 'API failed: ' + response.status,
+        response: responseText.substring(0, 500)
+      });
     }
 
     let data;
     try {
       data = JSON.parse(responseText);
     } catch (e) {
-      return res.status(500).json({ error: 'Invalid JSON', response_preview: responseText.substring(0, 300) });
+      return res.status(500).json({ error: 'Invalid JSON', response: responseText.substring(0, 300) });
     }
 
     let imageBase64 = null;
-    if (data.generatedImages && data.generatedImages[0]) {
-      const img = data.generatedImages[0];
-      if (img.image?.b64_json) {
-        imageBase64 = `data:image/png;base64,${img.image.b64_json}`;
-      } else if (img.encodedData) {
-        imageBase64 = `data:image/png;base64,${img.encodedData}`;
+    if (data.candidates?.[0]?.content?.parts) {
+      for (const part of data.candidates[0].content.parts) {
+        if (part.inlineData?.data) {
+          const mimeType = part.inlineData.mimeType || 'image/png';
+          imageBase64 = `data:${mimeType};base64,${part.inlineData.data}`;
+          break;
+        }
       }
     }
 
     if (!imageBase64) {
-      return res.status(200).json({ success: false, error: 'No image', response_keys: Object.keys(data) });
+      return res.status(200).json({ 
+        success: false, 
+        error: 'No image generated',
+        model_used: modelName
+      });
     }
 
     return res.status(200).json({ success: true, image: imageBase64 });
