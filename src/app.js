@@ -6,6 +6,7 @@ import {
     addToHistory, incrementStats, addToFavorites,
     renderHistory, renderFavorites, updateStats,
     deleteHistory, deleteFavorite, clearHistory, clearFavorites,
+    useHistory, useFavorite, historyToFavorite,
     injectDeps
 } from './storage.js';
 
@@ -14,6 +15,18 @@ let currentStyle = 'auto';
 let currentImageUrl = null;
 let currentPrompt = '';
 let isGenerating = false;
+let activeImageRequestId = 0;
+
+const TEMPLATE_STYLE_MAP = {
+    portrait: 'photography',
+    landscape: 'photography',
+    anime: 'anime',
+    cyberpunk: 'concept',
+    fantasy: 'illustration',
+    product: 'photography',
+    poster: 'concept',
+    concept: 'concept'
+};
 
 /* ==================== 依赖注入（解决循环依赖） ==================== */
 function showToast(message) {
@@ -59,6 +72,55 @@ function fillTemplate(template, category) {
         .replace('{style}', getRandom(variables.style));
 }
 
+function setActiveStyle(style) {
+    currentStyle = style;
+    document.querySelectorAll('.style-chip').forEach(chip => {
+        const isActive = chip.dataset.style === style;
+        chip.classList.toggle('active', isActive);
+        chip.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        chip.tabIndex = isActive ? 0 : -1;
+    });
+}
+
+function resetImageUi() {
+    document.getElementById('imagePreview').classList.remove('show');
+    document.getElementById('imageActions').classList.remove('show');
+    document.getElementById('imageError').classList.remove('show');
+    document.getElementById('imageError').textContent = '';
+}
+
+function finishImageRequest() {
+    document.getElementById('imageLoading').classList.remove('show');
+    document.getElementById('generateImageBtn').disabled = false;
+    isGenerating = false;
+}
+
+async function parseGenerateResponse(response) {
+    const rawText = await response.text();
+
+    if (!rawText) {
+        return {
+            ok: response.ok,
+            data: {}
+        };
+    }
+
+    try {
+        return {
+            ok: response.ok,
+            data: JSON.parse(rawText)
+        };
+    } catch {
+        return {
+            ok: response.ok,
+            data: {
+                error: response.ok ? '服务返回了无法解析的内容' : '服务返回了非 JSON 错误响应',
+                details: rawText.slice(0, 300)
+            }
+        };
+    }
+}
+
 /* ==================== 粒子背景 ==================== */
 function createParticles() {
     const container = document.getElementById('particles');
@@ -80,9 +142,28 @@ function bindEvents() {
     // 风格选择
     document.querySelectorAll('.style-chip').forEach(chip => {
         chip.addEventListener('click', () => {
-            document.querySelectorAll('.style-chip').forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
-            currentStyle = chip.dataset.style;
+            setActiveStyle(chip.dataset.style);
+        });
+
+        chip.addEventListener('keydown', e => {
+            const chips = Array.from(document.querySelectorAll('.style-chip'));
+            const index = chips.indexOf(chip);
+
+            if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                setActiveStyle(chip.dataset.style);
+                return;
+            }
+
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') {
+                return;
+            }
+
+            e.preventDefault();
+            const direction = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+            const nextChip = chips[(index + direction + chips.length) % chips.length];
+            setActiveStyle(nextChip.dataset.style);
+            nextChip.focus();
         });
     });
 
@@ -244,41 +325,27 @@ function saveFavorite() {
 function clearAll() {
     document.getElementById('keywordInput').value = '';
     document.getElementById('promptOutput').value = '';
-    document.getElementById('imagePreview').classList.remove('show');
-    document.getElementById('imageActions').classList.remove('show');
-    document.getElementById('imageError').classList.remove('show');
+    resetImageUi();
     document.getElementById('generateImageBtn').disabled = false;
+    document.getElementById('generatedImage').src = '';
     currentImageUrl = null;
     currentPrompt = '';
     isGenerating = false;
+    activeImageRequestId++;
     showToast('已清空');
 }
 
 /* ==================== 模板 ==================== */
 function useTemplate(type) {
     document.getElementById('keywordInput').value = '';
-
-    const styleMap = {
-        portrait: 'photography',
-        landscape: 'photography',
-        anime: 'anime',
-        cyberpunk: 'concept',
-        fantasy: 'illustration',
-        product: 'photography',
-        poster: 'concept',
-        concept: 'concept'
-    };
-
-    currentStyle = styleMap[type] || 'auto';
-    document.querySelectorAll('.style-chip').forEach(c => {
-        c.classList.toggle('active', c.dataset.style === currentStyle);
-    });
+    const displayStyle = TEMPLATE_STYLE_MAP[type] || 'auto';
+    setActiveStyle(displayStyle);
 
     const templates = promptTemplates[type] || promptTemplates.portrait;
     const prompt = fillTemplate(getRandom(templates), type);
     document.getElementById('promptOutput').value = prompt;
-    addToHistory(prompt, type);
-    incrementStats(type);
+    addToHistory(prompt, displayStyle);
+    incrementStats(displayStyle);
     showToast('已应用模板：' + type);
 }
 
@@ -292,15 +359,23 @@ async function generateImage() {
         return;
     }
 
+    if (prompt.length > 4000) {
+        showToast('提示词过长，请控制在 4000 字符以内');
+        return;
+    }
+
     const generateBtn = document.getElementById('generateImageBtn');
     const loading = document.getElementById('imageLoading');
     const preview = document.getElementById('imagePreview');
     const error = document.getElementById('imageError');
     const actions = document.getElementById('imageActions');
+    const requestId = ++activeImageRequestId;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
-    preview.classList.remove('show');
-    error.classList.remove('show');
-    actions.classList.remove('show');
+    resetImageUi();
+    currentImageUrl = null;
+    document.getElementById('generatedImage').src = '';
     loading.classList.add('show');
     generateBtn.disabled = true;
     isGenerating = true;
@@ -310,16 +385,20 @@ async function generateImage() {
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
+            body: JSON.stringify({ prompt }),
+            signal: controller.signal
         });
 
-        const data = await response.json();
-        loading.classList.remove('show');
-        generateBtn.disabled = false;
-        isGenerating = false;
+        const { ok, data } = await parseGenerateResponse(response);
+        if (requestId !== activeImageRequestId) {
+            return;
+        }
 
-        if (data.error) {
-            error.textContent = '生成失败：' + data.error + (data.details ? ' - ' + JSON.stringify(data.details) : '');
+        finishImageRequest();
+
+        if (!ok || data.error) {
+            const details = data.details ? `：${typeof data.details === 'string' ? data.details : JSON.stringify(data.details)}` : '';
+            error.textContent = `生成失败：${data.error || '请求未成功'}${details}`;
             error.classList.add('show');
             return;
         }
@@ -331,15 +410,21 @@ async function generateImage() {
             actions.classList.add('show');
             showToast('图片生成成功！');
         } else {
-            error.textContent = '未返回图片数据，请查看控制台日志';
+            error.textContent = '未返回图片数据，请稍后重试';
             error.classList.add('show');
         }
     } catch (err) {
-        loading.classList.remove('show');
-        generateBtn.disabled = false;
-        isGenerating = false;
-        error.textContent = '网络错误：' + err.message;
+        if (requestId !== activeImageRequestId) {
+            return;
+        }
+
+        finishImageRequest();
+        error.textContent = err.name === 'AbortError'
+            ? '生成超时：请稍后重试或简化提示词'
+            : '网络错误：' + err.message;
         error.classList.add('show');
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
@@ -389,6 +474,8 @@ window.clearAll = clearAll;
 window.useTemplate = useTemplate;
 window.generateImage = generateImage;
 window.downloadImage = downloadImage;
+window.clearHistory = clearHistory;
+window.clearFavorites = clearFavorites;
 // 历史/收藏通过事件委托，无需 window 导出
 
 /* ==================== 初始化 ==================== */

@@ -1,11 +1,74 @@
+const REQUEST_TIMEOUT_MS = 45000;
+const MAX_PROMPT_LENGTH = 4000;
+
+function parseJsonSafe(text) {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractImageData(payload) {
+  const parts = payload?.candidates?.[0]?.content?.parts || [];
+  for (const part of parts) {
+    if (part.inlineData?.data) {
+      return {
+        mimeType: part.inlineData.mimeType || 'image/png',
+        data: part.inlineData.data
+      };
+    }
+  }
+  return null;
+}
+
+async function fetchWithRetry(url, options, retries = 2, delay = 1500) {
+  for (let i = 0; i <= retries; i++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(new Error('Request timeout')), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+
+      if (response.status === 429 && i < retries) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+        continue;
+      }
+
+      return response;
+    } catch (error) {
+      if (i < retries && error.name !== 'AbortError') {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  throw new Error('Retry limit exceeded');
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { prompt } = req.body;
-  if (!prompt || typeof prompt !== 'string') {
+  const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+  if (!prompt) {
     return res.status(400).json({ error: 'Prompt is required' });
+  }
+
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    return res.status(400).json({
+      error: `Prompt is too long. Keep it under ${MAX_PROMPT_LENGTH} characters.`
+    });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -15,91 +78,64 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'API key not configured' });
   }
 
-  // 指数退避重试函数
-  async function fetchWithRetry(url, options, retries = 3, delay = 3000) {
-    for (let i = 0; i <= retries; i++) {
-      try {
-        const response = await fetch(url, options);
-        
-        if (response.status === 429 && i < retries) {
-          console.warn(`触发 429 限流，等待 ${delay}ms 后重试... (${i + 1}/${retries})`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2; // 指数退避
-          continue;
-        }
-        
-        return response;
-      } catch (error) {
-        if (i < retries) {
-          console.warn(`请求失败，等待 ${delay}ms 后重试... (${i + 1}/${retries})`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-        } else {
-          throw error;
-        }
-      }
-    }
-    throw new Error('重试次数耗尽');
-  }
-
   try {
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     const response = await fetchWithRetry(apiUrl, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        Accept: 'application/json'
       },
       body: JSON.stringify({
         contents: [{
           parts: [{ text: prompt }]
         }],
         generationConfig: {
-          responseModalities: ["TEXT", "IMAGE"]
+          responseModalities: ['TEXT', 'IMAGE']
         }
-      }),
-    }, 3, 3000);
+      })
+    });
 
     const responseText = await response.text();
+    const data = parseJsonSafe(responseText);
 
     if (!response.ok) {
-      return res.status(response.status).json({ 
-        error: 'API failed: ' + response.status,
-        response: responseText.substring(0, 500)
+      const providerMessage = data?.error?.message || data?.message || responseText.slice(0, 300);
+      return res.status(response.status).json({
+        error: 'Image generation request failed',
+        details: providerMessage || `HTTP ${response.status}`,
+        status: response.status
       });
     }
 
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      return res.status(500).json({ error: 'Invalid JSON', response: responseText.substring(0, 300) });
-    }
-
-    let imageBase64 = null;
-    if (data.candidates?.[0]?.content?.parts) {
-      for (const part of data.candidates[0].content.parts) {
-        if (part.inlineData?.data) {
-          const mimeType = part.inlineData.mimeType || 'image/png';
-          imageBase64 = `data:${mimeType};base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-    }
-
-    if (!imageBase64) {
-      return res.status(200).json({ 
-        success: false, 
-        error: 'No image generated. Try a more visual prompt.',
-        model_used: modelName
+    if (!data) {
+      return res.status(502).json({
+        error: 'Invalid response from image provider',
+        details: responseText.slice(0, 300)
       });
     }
 
-    return res.status(200).json({ success: true, image: imageBase64 });
+    const imageData = extractImageData(data);
+    if (!imageData) {
+      return res.status(200).json({
+        success: false,
+        error: 'No image was returned. Try a more visual prompt.',
+        details: data?.candidates?.[0]?.finishReason || null,
+        modelUsed: modelName
+      });
+    }
 
+    return res.status(200).json({
+      success: true,
+      image: `data:${imageData.mimeType};base64,${imageData.data}`,
+      modelUsed: modelName
+    });
   } catch (error) {
-    console.error('Error:', error);
-    return res.status(500).json({ error: 'Server error: ' + error.message });
+    const isTimeout = error.name === 'AbortError';
+    return res.status(isTimeout ? 504 : 500).json({
+      error: isTimeout ? 'Image generation timed out' : 'Server error during image generation',
+      details: error.message
+    });
   }
 };
