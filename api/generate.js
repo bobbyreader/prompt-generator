@@ -21,7 +21,7 @@ module.exports = async function handler(req, res) {
   try {
     // 尝试 Imagen 的 generateContent 端点（与 Gemini 兼容）
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
