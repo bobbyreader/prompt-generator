@@ -5,597 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucky Girl的专家提示词系统</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            min-height: 100vh;
-            color: #fff;
-            overflow-x: hidden;
-        }
-
-        .particles {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            overflow: hidden;
-            z-index: 0;
-        }
-
-        .particle {
-            position: absolute;
-            width: 4px;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            animation: float 15s infinite ease-in-out;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
-        }
-
-        .container {
-            position: relative;
-            z-index: 1;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 30px 20px;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-
-        .logo {
-            font-size: 3rem;
-            margin-bottom: 10px;
-        }
-
-        h1 {
-            font-size: 2.8rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #ff6b9d 0%, #ffa500 50%, #ffd700 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-shadow: 0 0 30px rgba(255, 107, 157, 0.5);
-            margin-bottom: 8px;
-            letter-spacing: 2px;
-        }
-
-        .subtitle {
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 1rem;
-        }
-
-        .main-layout {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-
-        @media (max-width: 900px) {
-            .main-layout {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .panel {
-            background: rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-        }
-
-        .panel-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .input-section {
-            margin-bottom: 20px;
-        }
-
-        .input-label {
-            font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.8);
-            margin-bottom: 10px;
-            display: block;
-        }
-
-        .keyword-input {
-            width: 100%;
-            padding: 15px 20px;
-            font-size: 1rem;
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            outline: none;
-            transition: all 0.3s ease;
-        }
-
-        .keyword-input::placeholder {
-            color: rgba(255, 255, 255, 0.4);
-        }
-
-        .keyword-input:focus {
-            border-color: #667eea;
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        .style-selector {
-            margin-bottom: 20px;
-        }
-
-        .style-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-        }
-
-        .style-chip {
-            padding: 10px 15px;
-            font-size: 0.85rem;
-            text-align: center;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 10px;
-            color: rgba(255, 255, 255, 0.8);
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .style-chip:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .style-chip.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-color: transparent;
-            color: #fff;
-        }
-
-        .generate-btn {
-            width: 100%;
-            padding: 16px 30px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .generate-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
-        }
-
-        .generate-btn:active {
-            transform: translateY(0);
-        }
-
-        .prompt-output {
-            margin-bottom: 20px;
-        }
-
-        .prompt-textarea {
-            width: 100%;
-            min-height: 200px;
-            padding: 15px 20px;
-            font-size: 0.95rem;
-            line-height: 1.8;
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
-            outline: none;
-            resize: vertical;
-            font-family: inherit;
-            transition: all 0.3s ease;
-        }
-
-        .prompt-textarea::placeholder {
-            color: rgba(255, 255, 255, 0.4);
-        }
-
-        .prompt-textarea:focus {
-            border-color: #38ef7d;
-            background: rgba(255, 255, 255, 0.08);
-        }
-
-        .prompt-textarea::selection {
-            background: rgba(102, 126, 234, 0.5);
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 15px;
-        }
-
-        .action-btn {
-            flex: 1;
-            padding: 14px 20px;
-            font-size: 1rem;
-            font-weight: 500;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        .copy-btn {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: #fff;
-        }
-
-        .copy-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(56, 239, 125, 0.4);
-        }
-
-        .copy-btn.copied {
-            background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
-        }
-
-        .enhance-btn {
-            background: rgba(255, 255, 255, 0.15);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .enhance-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
-        }
-
-        .clear-btn {
-            background: rgba(245, 87, 108, 0.2);
-            color: #f5576c;
-            border: 1px solid rgba(245, 87, 108, 0.3);
-        }
-
-        .clear-btn:hover {
-            background: rgba(245, 87, 108, 0.3);
-        }
-
-        .templates-section {
-            background: rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .templates-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .template-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 15px;
-        }
-
-        .template-card {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 15px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .template-card:hover {
-            background: rgba(255, 255, 255, 0.15);
-            transform: translateY(-3px);
-            border-color: rgba(102, 126, 234, 0.5);
-        }
-
-        .template-icon {
-            font-size: 1.8rem;
-            margin-bottom: 8px;
-        }
-
-        .template-name {
-            font-size: 0.95rem;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .template-desc {
-            font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.6);
-        }
-
-        .loading {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 30px;
-        }
-
-        .loading.show {
-            display: flex;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(255, 255, 255, 0.1);
-            border-top-color: #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 15px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .toast {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: #fff;
-            padding: 15px 30px;
-            border-radius: 10px;
-            font-weight: 500;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            opacity: 0;
-            transition: all 0.3s ease;
-            z-index: 1000;
-        }
-
-        .toast.show {
-            transform: translateX(-50%) translateY(0);
-            opacity: 1;
-        }
-
-        .quick-tips {
-            margin-top: 30px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            padding: 20px;
-        }
-
-        .quick-tips h3 {
-            font-size: 1rem;
-            margin-bottom: 15px;
-            color: rgba(255, 255, 255, 0.9);
-        }
-
-        .tips-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .tip-tag {
-            padding: 8px 15px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            font-size: 0.85rem;
-            color: rgba(255, 255, 255, 0.8);
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .tip-tag:hover {
-            background: rgba(102, 126, 234, 0.3);
-            color: #fff;
-        }
-
-        .enhancement-panel {
-            margin-top: 15px;
-            padding: 15px;
-            background: rgba(102, 126, 234, 0.1);
-            border-radius: 10px;
-            border: 1px solid rgba(102, 126, 234, 0.2);
-        }
-
-        .enhancement-title {
-            font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.8);
-            margin-bottom: 10px;
-        }
-
-        .enhancement-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .enhance-tag {
-            padding: 6px 12px;
-            font-size: 0.8rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 15px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .enhance-tag:hover {
-            background: rgba(102, 126, 234, 0.5);
-        }
-
-        /* 图片生成相关样式 */
-        .image-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .image-preview {
-            display: none;
-            margin-bottom: 20px;
-            border-radius: 12px;
-            overflow: hidden;
-            background: rgba(0, 0, 0, 0.3);
-        }
-
-        .image-preview.show {
-            display: block;
-        }
-
-        .image-preview img {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-
-        .image-loading {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            min-height: 300px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }
-
-        .image-loading.show {
-            display: flex;
-        }
-
-        .image-loading .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            border-top-color: #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        .generate-image-btn {
-            width: 100%;
-            padding: 14px 20px;
-            font-size: 1rem;
-            font-weight: 600;
-            background: linear-gradient(135deg, #ff6b9d 0%, #c44569 100%);
-            color: #fff;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .generate-image-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(255, 107, 157, 0.4);
-        }
-
-        .generate-image-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .image-actions {
-            display: none;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        .image-actions.show {
-            display: flex;
-        }
-
-        .image-action-btn {
-            flex: 1;
-            padding: 10px 15px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        .download-btn {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: #fff;
-        }
-
-        .download-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(56, 239, 125, 0.4);
-        }
-
-        .regenerate-btn {
-            background: rgba(255, 255, 255, 0.15);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .regenerate-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
-        }
-
-        .image-error {
-            display: none;
-            padding: 20px;
-            background: rgba(245, 87, 108, 0.2);
-            border: 1px solid rgba(245, 87, 108, 0.3);
-            border-radius: 12px;
-            color: #f5576c;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .image-error.show {
-            display: block;
-        }
-    </style>
+    <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
+    <div aria-live="polite" aria-atomic="true" id="ariaAnnounce" class="sr-only"></div>
     <div class="particles" id="particles"></div>
+
+    <button class="theme-toggle" id="themeToggle" aria-label="切换深色/浅色主题">
+        <span id="themeIcon">🌙</span> <span id="themeText">深色</span>
+    </button>
+
+    <div class="shortcut-hint" aria-hidden="true">
+        <kbd>Enter</kbd> 生成 · <kbd>Ctrl+S</kbd> 收藏
+    </div>
 
     <div class="container">
         <header>
@@ -607,37 +29,34 @@
         <div class="main-layout">
             <!-- 左侧：输入区域 -->
             <div class="panel">
-                <div class="panel-title">
-                    <span>📝</span>
-                    <span>输入你的想法</span>
-                </div>
+                <div class="panel-title"><span>📝</span><span>输入你的想法</span></div>
 
                 <div class="input-section">
-                    <label class="input-label">描述你的画面</label>
-                    <input type="text" class="keyword-input" id="keywordInput" 
-                           placeholder="例如：一只在森林里的小狐狸，日落时分" />
+                    <label class="input-label" for="keywordInput">描述你的画面</label>
+                    <input type="text" class="keyword-input" id="keywordInput"
+                           placeholder="例如：一只在森林里的小狐狸，日落时分"
+                           aria-describedby="keywordHint" />
+                    <span id="keywordHint" class="sr-only">输入描述后按回车生成提示词</span>
                 </div>
 
-                <div class="style-selector">
+                <div class="style-selector" role="group" aria-label="选择风格">
                     <label class="input-label">选择风格</label>
-                    <div class="style-grid">
-                        <div class="style-chip active" data-style="auto">🎯 自动</div>
-                        <div class="style-chip" data-style="photography">📷 摄影</div>
-                        <div class="style-chip" data-style="illustration">🎨 插画</div>
-                        <div class="style-chip" data-style="anime">✨ 动漫</div>
-                        <div class="style-chip" data-style="concept">💡 概念</div>
-                        <div class="style-chip" data-style="3d">🎲 3D渲染</div>
+                    <div class="style-grid" role="radiogroup">
+                        <div class="style-chip active" data-style="auto" role="radio" aria-checked="true" tabindex="0">🎯 自动</div>
+                        <div class="style-chip" data-style="photography" role="radio" aria-checked="false" tabindex="0">📷 摄影</div>
+                        <div class="style-chip" data-style="illustration" role="radio" aria-checked="false" tabindex="0">🎨 插画</div>
+                        <div class="style-chip" data-style="anime" role="radio" aria-checked="false" tabindex="0">✨ 动漫</div>
+                        <div class="style-chip" data-style="concept" role="radio" aria-checked="false" tabindex="0">💡 概念</div>
+                        <div class="style-chip" data-style="3d" role="radio" aria-checked="false" tabindex="0">🎲 3D渲染</div>
                     </div>
                 </div>
 
-                <button class="generate-btn" onclick="generatePrompt()">
-                    <span>⚡</span>
-                    <span>生成提示词</span>
+                <button class="generate-btn" onclick="generatePrompt()" aria-label="生成提示词">
+                    <span>⚡</span><span>生成提示词</span>
                 </button>
 
-                <div class="loading" id="loading">
-                    <div class="spinner"></div>
-                    <span>正在生成...</span>
+                <div class="loading" id="loading" role="status" aria-live="polite">
+                    <div class="spinner"></div><span>正在生成...</span>
                 </div>
 
                 <div class="enhancement-panel">
@@ -655,60 +74,55 @@
 
             <!-- 右侧：输出区域 -->
             <div class="panel">
-                <div class="panel-title">
-                    <span>✨</span>
-                    <span>生成的提示词</span>
-                </div>
+                <div class="panel-title"><span>✨</span><span>生成的提示词</span></div>
 
                 <div class="prompt-output">
-                    <textarea class="prompt-textarea" id="promptOutput" 
+                    <label class="input-label" for="promptOutput">生成的提示词</label>
+                    <textarea class="prompt-textarea" id="promptOutput"
                               placeholder="提示词将在这里生成...
 
-点击「生成提示词」按钮，或选择一个模板开始">
-                    </textarea>
+点击「生成提示词」按钮，或选择一个模板开始"
+                              aria-label="提示词输出区域"></textarea>
                 </div>
 
-                <div class="action-buttons">
-                    <button class="action-btn copy-btn" onclick="copyPrompt()">
-                        <span>📋</span>
-                        <span>复制提示词</span>
+                <div class="action-buttons" role="toolbar" aria-label="提示词操作">
+                    <button class="action-btn copy-btn" onclick="copyPrompt()" aria-label="复制提示词">
+                        <span>📋</span><span>复制提示词</span>
                     </button>
-                    <button class="action-btn enhance-btn" onclick="enhancePrompt()">
-                        <span>✨</span>
-                        <span>优化润色</span>
+                    <button class="action-btn enhance-btn" onclick="enhancePrompt()" aria-label="优化润色">
+                        <span>✨</span><span>优化润色</span>
                     </button>
-                    <button class="action-btn clear-btn" onclick="clearAll()">
-                        <span>🗑️</span>
-                        <span>清空</span>
+                    <button class="action-btn enhance-btn" onclick="saveFavorite()" aria-label="收藏提示词" title="Ctrl+S">
+                        <span>⭐</span><span>收藏</span>
+                    </button>
+                    <button class="action-btn clear-btn" onclick="clearAll()" aria-label="清空所有">
+                        <span>🗑️</span><span>清空</span>
                     </button>
                 </div>
 
-                <!-- 图片生成区域 -->
-                <div class="image-section">
-                    <button class="generate-image-btn" onclick="generateImage()" id="generateImageBtn">
-                        <span>🎨</span>
-                        <span>生成图片</span>
+                <div class="image-section" aria-label="图片生成">
+                    <button class="generate-image-btn" onclick="generateImage()" id="generateImageBtn"
+                            aria-label="使用 AI 生成图片">
+                        <span>🎨</span><span>生成图片</span>
                     </button>
 
-                    <div class="image-loading" id="imageLoading">
+                    <div class="image-loading" id="imageLoading" role="status" aria-live="polite">
                         <div class="spinner"></div>
-                        <span style="margin-left: 15px;">正在生成图片...</span>
+                        <span style="margin-left:15px;">正在生成图片...</span>
                     </div>
 
-                    <div class="image-error" id="imageError"></div>
+                    <div class="image-error" id="imageError" role="alert"></div>
 
-                    <div class="image-preview" id="imagePreview">
-                        <img id="generatedImage" src="" alt="生成的图片" />
+                    <div class="image-preview" id="imagePreview" aria-label="图片预览">
+                        <img id="generatedImage" src="" alt="AI 生成的图片" />
                     </div>
 
-                    <div class="image-actions" id="imageActions">
-                        <button class="image-action-btn download-btn" onclick="downloadImage()">
-                            <span>📥</span>
-                            <span>下载</span>
+                    <div class="image-actions" id="imageActions" role="toolbar" aria-label="图片操作">
+                        <button class="image-action-btn download-btn" onclick="downloadImage()" aria-label="下载图片">
+                            <span>📥</span><span>下载</span>
                         </button>
-                        <button class="image-action-btn regenerate-btn" onclick="generateImage()">
-                            <span>🔄</span>
-                            <span>重新生成</span>
+                        <button class="image-action-btn regenerate-btn" onclick="generateImage()" aria-label="重新生成">
+                            <span>🔄</span><span>重新生成</span>
                         </button>
                     </div>
                 </div>
@@ -717,50 +131,49 @@
 
         <!-- 模板区域 -->
         <div class="templates-section">
-            <div class="templates-title">
-                <span>🚀</span>
-                <span>快速开始模板</span>
+            <div class="templates-title"><span>🚀</span><span>快速开始模板</span></div>
+            <div class="template-grid" role="list">
+                <div class="template-card" onclick="useTemplate('portrait')" role="listitem" tabindex="0">👤 人像摄影<span class="template-desc">专业人像写真</span></div>
+                <div class="template-card" onclick="useTemplate('landscape')" role="listitem" tabindex="0">🏔️ 风景大片<span class="template-desc">史诗级风景</span></div>
+                <div class="template-card" onclick="useTemplate('anime')" role="listitem" tabindex="0">🌸 动漫风格<span class="template-desc">日漫美学</span></div>
+                <div class="template-card" onclick="useTemplate('cyberpunk')" role="listitem" tabindex="0">🌃 赛博朋克<span class="template-desc">未来都市</span></div>
+                <div class="template-card" onclick="useTemplate('fantasy')" role="listitem" tabindex="0">🐉 奇幻魔法<span class="template-desc">魔幻世界</span></div>
+                <div class="template-card" onclick="useTemplate('product')" role="listitem" tabindex="0">📦 产品展示<span class="template-desc">商业摄影</span></div>
+                <div class="template-card" onclick="useTemplate('poster')" role="listitem" tabindex="0">🎬 海报设计<span class="template-desc">视觉创意</span></div>
+                <div class="template-card" onclick="useTemplate('concept')" role="listitem" tabindex="0">💭 概念艺术<span class="template-desc">创意概念</span></div>
             </div>
-            <div class="template-grid">
-                <div class="template-card" onclick="useTemplate('portrait')">
-                    <div class="template-icon">👤</div>
-                    <div class="template-name">人像摄影</div>
-                    <div class="template-desc">专业人像写真</div>
+        </div>
+
+        <!-- 历史/收藏/统计 -->
+        <div class="history-favorites-section">
+            <div class="history-panel" aria-label="历史记录">
+                <div class="panel-header">
+                    <h3>📜 历史记录</h3>
+                    <button class="clear-history-btn" onclick="clearHistory()" aria-label="清空历史">清空</button>
                 </div>
-                <div class="template-card" onclick="useTemplate('landscape')">
-                    <div class="template-icon">🏔️</div>
-                    <div class="template-name">风景大片</div>
-                    <div class="template-desc">史诗级风景</div>
+                <div id="historyList" role="list"></div>
+            </div>
+
+            <div class="favorites-panel" aria-label="收藏夹">
+                <div class="panel-header">
+                    <h3>⭐ 我的收藏</h3>
+                    <button class="clear-history-btn" onclick="clearFavorites()" aria-label="清空收藏">清空</button>
                 </div>
-                <div class="template-card" onclick="useTemplate('anime')">
-                    <div class="template-icon">🌸</div>
-                    <div class="template-name">动漫风格</div>
-                    <div class="template-desc">日漫美学</div>
+                <div id="favoritesList" role="list"></div>
+            </div>
+
+            <div class="stats-panel" aria-label="使用统计">
+                <div class="panel-header"><h3>📊 使用统计</h3></div>
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-value" id="statTotal">0</div><div class="stat-label">总生成次数</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statToday">0</div><div class="stat-label">今日生成</div></div>
                 </div>
-                <div class="template-card" onclick="useTemplate('cyberpunk')">
-                    <div class="template-icon">🌃</div>
-                    <div class="template-name">赛博朋克</div>
-                    <div class="template-desc">未来都市</div>
-                </div>
-                <div class="template-card" onclick="useTemplate('fantasy')">
-                    <div class="template-icon">🐉</div>
-                    <div class="template-name">奇幻魔法</div>
-                    <div class="template-desc">魔幻世界</div>
-                </div>
-                <div class="template-card" onclick="useTemplate('product')">
-                    <div class="template-icon">📦</div>
-                    <div class="template-name">产品展示</div>
-                    <div class="template-desc">商业摄影</div>
-                </div>
-                <div class="template-card" onclick="useTemplate('poster')">
-                    <div class="template-icon">🎬</div>
-                    <div class="template-name">海报设计</div>
-                    <div class="template-desc">视觉创意</div>
-                </div>
-                <div class="template-card" onclick="useTemplate('concept')">
-                    <div class="template-icon">💭</div>
-                    <div class="template-name">概念艺术</div>
-                    <div class="template-desc">创意概念</div>
+                <div class="stats-chart" aria-label="风格分布">
+                    <div class="chart-bar"><div class="chart-label">摄影</div><div class="chart-fill"><div class="chart-fill-inner" id="chart-photography" style="width:0%"></div></div><div class="chart-count" id="count-photography">0</div></div>
+                    <div class="chart-bar"><div class="chart-label">插画</div><div class="chart-fill"><div class="chart-fill-inner" id="chart-illustration" style="width:0%"></div></div><div class="chart-count" id="count-illustration">0</div></div>
+                    <div class="chart-bar"><div class="chart-label">动漫</div><div class="chart-fill"><div class="chart-fill-inner" id="chart-anime" style="width:0%"></div></div><div class="chart-count" id="count-anime">0</div></div>
+                    <div class="chart-bar"><div class="chart-label">概念</div><div class="chart-fill"><div class="chart-fill-inner" id="chart-concept" style="width:0%"></div></div><div class="chart-count" id="count-concept">0</div></div>
+                    <div class="chart-bar"><div class="chart-label">3D渲染</div><div class="chart-fill"><div class="chart-fill-inner" id="chart-3d" style="width:0%"></div></div><div class="chart-count" id="count-3d">0</div></div>
                 </div>
             </div>
         </div>
@@ -787,460 +200,9 @@
 
     <div class="toast" id="toast">已复制到剪贴板！</div>
 
-    <script>
-        // 创建背景粒子
-        function createParticles() {
-            const container = document.getElementById('particles');
-            for (let i = 0; i < 25; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                particle.style.left = Math.random() * 100 + '%';
-                particle.style.animationDelay = Math.random() * 15 + 's';
-                particle.style.animationDuration = (10 + Math.random() * 10) + 's';
-                container.appendChild(particle);
-            }
-        }
-        createParticles();
-
-        // 当前选中的风格
-        let currentStyle = 'auto';
-
-        // 风格选择
-        document.querySelectorAll('.style-chip').forEach(chip => {
-            chip.addEventListener('click', function() {
-                document.querySelectorAll('.style-chip').forEach(c => c.classList.remove('active'));
-                this.classList.add('active');
-                currentStyle = this.dataset.style;
-            });
-        });
-
-        // 回车生成
-        document.getElementById('keywordInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                generatePrompt();
-            }
-        });
-
-        // 风格增强词库
-        const styleEnhancers = {
-            auto: {
-                common: 'highly detailed, professional quality, 8k resolution',
-                modifiers: ['cinematic composition', 'dramatic lighting', 'emotional atmosphere']
-            },
-            photography: {
-                common: 'shot on Sony A7R IV, 85mm lens, f/1.4 aperture, professional photography, sharp focus, shallow depth of field',
-                modifiers: ['natural lighting', 'golden hour', 'studio lighting', 'Kodak Portra 400', 'Leica M10', 'film grain']
-            },
-            illustration: {
-                common: 'digital painting, detailed illustration, artstation trending, vibrant colors',
-                modifiers: ['watercolor style', 'oil painting style', 'concept art', 'flat design', 'vector art']
-            },
-            anime: {
-                common: 'anime style, cel shaded, Studio Ghibli inspired, detailed anime art, vibrant colors',
-                modifiers: ['soft lighting', 'detailed background', 'anime key visual', 'mahou shoujo', 'shonen']
-            },
-            concept: {
-                common: 'concept art, design sheet, artstation trending, professional concept art quality',
-                modifiers: ['fantasy environment', 'sci-fi design', 'character design', 'matte painting', 'blueprint style']
-            },
-            '3d': {
-                common: '3D render, octane render, unreal engine 5, octane render, studio lighting, hyper-realistic',
-                modifiers: ['ray tracing', 'global illumination', '8k render', 'cinematic composition', 'Cinema 4D']
-            }
-        };
-
-        // 提示词生成模板
-        const promptTemplates = {
-            portrait: [
-                'Professional portrait photography of {subject}, {lighting}, {background}, shot on {camera}, {lens}, {mood}, 8k, ultra detailed, professional quality',
-                'Editorial portrait of {subject}, {clothing}, {pose}, {lighting} lighting, magazine cover quality, Vogue aesthetic, {camera}, {details}',
-                'Cinematic portrait, {subject}, {expression}, {lighting} lighting, {background}, dramatic atmosphere, film grain, {camera}, {mood}'
-            ],
-            landscape: [
-                'Epic {subject} landscape at {time}, {lighting} sunlight, {atmosphere}, {details}, ultra detailed textures, National Geographic quality, 8k resolution, cinematic color grading',
-                'Breathtaking {subject} scenery, {time} golden hour, {lighting} lighting, {atmosphere} atmosphere, {details}, nature photography, 8k, highly detailed',
-                'Panoramic {subject} view, {time}, volumetric clouds, {lighting}, {atmosphere}, {details}, ultra wide angle, 8k, dramatic sky'
-            ],
-            anime: [
-                'Beautiful anime illustration of {subject}, {expression}, {setting}, Studio Ghibli inspired, soft lighting, detailed background art, cel shaded, vibrant colors, {mood}',
-                'Anime {subject} character design, {pose}, {clothing}, {setting}, {lighting} lighting, anime key visual, detailed face, {mood}, vibrant anime aesthetic',
-                '{style} anime art of {subject}, {expression}, {setting}, dramatic {lighting} lighting, {background}, {mood}, high detail anime illustration'
-            ],
-            cyberpunk: [
-                'Cyberpunk {subject}, {setting}, neon lights, {lighting} lighting, rain-soaked streets, holographic advertisements, futuristic technology, blade runner aesthetic, 8k',
-                'Futuristic {subject} in cyberpunk city, neon signs, {lighting} atmosphere, wet streets reflecting lights, flying vehicles, {details}, cinematic composition, 8k',
-                'Dystopian cyberpunk scene, {subject}, {setting}, {lighting} neon lights, {details}, volumetric fog, oppressive atmosphere, cinematic, 8k ultra detailed'
-            ],
-            fantasy: [
-                'Fantasy {subject} in enchanted {setting}, magical atmosphere, {lighting} lighting, {details}, ethereal glow, {mood}, epic fantasy art, 8k, highly detailed',
-                'Epic fantasy scene, {subject}, {action}, {setting}, dramatic {lighting} lighting, {atmosphere}, {details}, Lord of the Rings inspired, cinematic composition, 8k',
-                'Mythical {subject} emerging from {setting}, {lighting} glow, magical {details}, {atmosphere} atmosphere, {mood}, fantasy art, 8k, ultra detailed'
-            ],
-            product: [
-                'Professional {subject} product photography, minimalist {background}, {lighting} lighting, {details}, commercial quality, sharp focus, 8k, hyper-realistic textures',
-                'Commercial product shot of {subject}, {background} studio setup, {lighting} light, {details}, product catalog quality, clean composition, 8k',
-                'E-commerce hero image of {subject}, floating in {background}, {lighting} lighting, soft shadow, commercial photography quality, 8k, clean usable'
-            ],
-            poster: [
-                'High-end {subject} poster design, {layout} composition, {typography} typography, {colors} color palette, {style} aesthetic, dramatic scale, {mood}, professional graphic design',
-                'Editorial {subject} poster, {layout} layout, {lighting} lighting, {style} style, {mood} atmosphere, bold typography, museum-quality graphic design, cinematic',
-                'Concept {subject} typography poster, {layout} composition, {colors} palette, {style} aesthetic, dramatic {mood}, premium paper texture, graphic design quality'
-            ],
-            concept: [
-                'Professional concept art of {subject}, {style} style, {lighting} lighting, {atmosphere} atmosphere, {details}, artstation trending, professional concept art quality, 8k',
-                'Concept design for {subject}, {style} aesthetic, {lighting} lighting, {atmosphere} environment, {details}, matte painting style, 8k, highly detailed',
-                'Futuristic concept art, {subject}, {style} design, {lighting} atmosphere, {atmosphere} setting, {details}, digital art, 8k, concept art quality'
-            ]
-        };
-
-        // 生成变量池
-        const variables = {
-            subject: {
-                common: ['a beautiful woman', 'a warrior', 'a wizard', 'a knight', 'an elf', 'a dragon'],
-                portrait: ['young woman', 'elegant lady', 'handsome man', 'elderly person', 'warrior', 'queen'],
-                landscape: ['mountain range', 'ancient forest', 'coastal cliff', 'floating islands', 'underwater world', 'crystal cave'],
-                anime: ['anime girl', 'samurai', 'magical girl', 'demon slayer', 'mecha pilot', 'vampire'],
-                cyberpunk: ['cybernetic warrior', 'hacker', 'AI entity', 'street vendor', 'corporate agent'],
-                fantasy: ['phoenix', 'mermaid', 'dragon', 'sorcerer', 'fairy', 'unicorn']
-            },
-            lighting: ['soft', 'dramatic', 'golden hour', 'cinematic', 'neon', 'backlit', 'rim', 'volumetric', 'natural', 'studio'],
-            background: ['studio', 'outdoor', 'abstract', 'bokeh', 'gradient', 'natural environment', 'urban'],
-            camera: ['Canon 5D Mark IV', 'Sony A7R IV', 'Leica M10', 'Hasselblad', 'RED camera'],
-            lens: ['85mm f/1.4', '50mm f/1.2', '35mm f/1.4', '70-200mm zoom'],
-            mood: ['dramatic', 'peaceful', 'mysterious', 'energetic', 'melancholic', 'ethereal', 'powerful'],
-            clothing: ['elegant dress', 'armor', 'casual outfit', 'traditional clothing', 'futuristic suit'],
-            pose: ['dynamic action', 'confident stance', 'meditative', 'walking', 'turning around'],
-            expression: ['determined', 'serene', 'mysterious', 'happy', 'intense', 'melancholic'],
-            setting: ['mystical forest', 'ancient ruins', 'floating islands', 'underwater palace', 'futuristic city'],
-            time: ['golden hour', 'sunset', 'dawn', 'midnight', 'blue hour', 'stormy day'],
-            atmosphere: ['misty', 'foggy', 'clear', 'dramatic clouds', 'serene', 'mysterious'],
-            details: ['intricate patterns', 'rich textures', 'elaborate decorations', 'subtle details', 'ornate design'],
-            action: ['battling', 'exploring', 'meditating', 'celebrating', 'transforming'],
-            layout: ['centered', 'asymmetric', 'diagonal', 'grid-based', 'minimalist'],
-            typography: ['bold sans-serif', 'elegant serif', 'modern geometric', 'handwritten style'],
-            colors: ['vibrant', 'muted', 'monochromatic', 'complementary', 'analogous', 'pastel'],
-            style: ['modern', 'vintage', 'minimalist', 'maximalist', 'futuristic', 'retro']
-        };
-
-        // 获取随机元素
-        function getRandom(arr) {
-            return arr[Math.floor(Math.random() * arr.length)];
-        }
-
-        // 填充模板
-        function fillTemplate(template, category) {
-            return template
-                .replace('{subject}', getRandom(variables.subject[category] || variables.subject.common))
-                .replace('{lighting}', getRandom(variables.lighting))
-                .replace('{background}', getRandom(variables.background))
-                .replace('{camera}', getRandom(variables.camera))
-                .replace('{lens}', getRandom(variables.lens))
-                .replace('{mood}', getRandom(variables.mood))
-                .replace('{clothing}', getRandom(variables.clothing))
-                .replace('{pose}', getRandom(variables.pose))
-                .replace('{expression}', getRandom(variables.expression))
-                .replace('{setting}', getRandom(variables.setting))
-                .replace('{time}', getRandom(variables.time))
-                .replace('{atmosphere}', getRandom(variables.atmosphere))
-                .replace('{details}', getRandom(variables.details))
-                .replace('{action}', getRandom(variables.action))
-                .replace('{layout}', getRandom(variables.layout))
-                .replace('{typography}', getRandom(variables.typography))
-                .replace('{colors}', getRandom(variables.colors))
-                .replace('{style}', getRandom(variables.style));
-        }
-
-        // 生成提示词
-        function generatePrompt() {
-            const keyword = document.getElementById('keywordInput').value.trim();
-            const output = document.getElementById('promptOutput');
-            const loading = document.getElementById('loading');
-
-            if (!keyword) {
-                showToast('请输入描述内容');
-                return;
-            }
-
-            loading.classList.add('show');
-
-            setTimeout(() => {
-                let prompt = '';
-
-                // 如果有自定义输入，将其融入
-                if (keyword) {
-                    const style = currentStyle === 'auto' ? 'photography' : currentStyle;
-                    const enhancers = styleEnhancers[style];
-                    
-                    // 基础描述 + 风格增强
-                    prompt = keyword;
-                    
-                    // 添加风格特定的修饰词
-                    prompt += ', ' + enhancers.common;
-                    
-                    // 随机添加1-2个额外修饰词
-                    const extraModifiers = [];
-                    const modCount = Math.floor(Math.random() * 2) + 1;
-                    for (let i = 0; i < modCount; i++) {
-                        extraModifiers.push(getRandom(enhancers.modifiers));
-                    }
-                    prompt += ', ' + extraModifiers.join(', ');
-                    
-                    // 添加质量标签
-                    prompt += ', ' + getRandom(['8k ultra detailed', 'highly detailed', 'award winning quality', 'professional quality', 'masterpiece']);
-                    
-                    // 添加构图建议
-                    prompt += ', ' + getRandom(['cinematic composition', 'perfect composition', 'balanced framing', 'dramatic angle']);
-                    
-                } else {
-                    // 无输入时使用模板
-                    const templates = promptTemplates[currentStyle] || promptTemplates.portrait;
-                    prompt = fillTemplate(getRandom(templates), currentStyle === 'auto' ? 'common' : currentStyle);
-                }
-
-                output.value = prompt;
-                loading.classList.remove('show');
-                showToast('提示词已生成！');
-            }, 600);
-        }
-
-        // 优化润色
-        function enhancePrompt() {
-            const output = document.getElementById('promptOutput');
-            let prompt = output.value.trim();
-
-            if (!prompt) {
-                showToast('先生成或输入提示词');
-                return;
-            }
-
-            const enhancements = [
-                'trending on artstation',
-                'intricate details',
-                'professional color grading',
-                'sharp focus',
-                'high dynamic range',
-                'realistic textures',
-                'emotional atmosphere',
-                'award-winning composition'
-            ];
-
-            const toAdd = [];
-            const count = Math.floor(Math.random() * 2) + 1;
-            for (let i = 0; i < count; i++) {
-                const item = getRandom(enhancements);
-                if (!toAdd.includes(item)) {
-                    toAdd.push(item);
-                }
-            }
-
-            output.value = prompt + ', ' + toAdd.join(', ');
-            showToast('已优化！');
-        }
-
-        // 追加增强词
-        function addEnhancement(text) {
-            const output = document.getElementById('promptOutput');
-            if (output.value.trim()) {
-                output.value += ', ' + text;
-            } else {
-                output.value = text;
-            }
-        }
-
-        // 快速添加元素
-        function addToPrompt(text) {
-            navigator.clipboard.writeText(text);
-            showToast('已复制：' + text);
-        }
-
-        // 复制提示词
-        function copyPrompt() {
-            const output = document.getElementById('promptOutput');
-            if (!output.value.trim()) {
-                showToast('没有可复制的内容');
-                return;
-            }
-
-            navigator.clipboard.writeText(output.value).then(() => {
-                showToast('已复制到剪贴板！');
-                
-                const btn = document.querySelector('.copy-btn');
-                btn.classList.add('copied');
-                btn.innerHTML = '<span>✓</span><span>已复制</span>';
-                setTimeout(() => {
-                    btn.classList.remove('copied');
-                    btn.innerHTML = '<span>📋</span><span>复制提示词</span>';
-                }, 2000);
-            });
-        }
-
-        // 清空
-        function clearAll() {
-            document.getElementById('keywordInput').value = '';
-            document.getElementById('promptOutput').value = '';
-            showToast('已清空');
-        }
-
-        // 使用模板
-        function useTemplate(type) {
-            document.getElementById('keywordInput').value = '';
-            
-            // 根据模板类型设置风格并生成
-            const styleMap = {
-                portrait: 'photography',
-                landscape: 'photography',
-                anime: 'anime',
-                cyberpunk: 'concept',
-                fantasy: 'illustration',
-                product: 'photography',
-                poster: 'concept',
-                concept: 'concept'
-            };
-
-            currentStyle = styleMap[type] || 'auto';
-            document.querySelectorAll('.style-chip').forEach(c => {
-                c.classList.toggle('active', c.dataset.style === currentStyle);
-            });
-
-            const templates = promptTemplates[type] || promptTemplates.portrait;
-            const prompt = fillTemplate(getRandom(templates), type);
-            document.getElementById('promptOutput').value = prompt;
-            
-            showToast('已应用模板：' + type);
-        }
-
-        // 显示提示
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2500);
-        }
-
-        // 生成图片
-        let currentImageUrl = null;
-        let currentPrompt = '';
-        let isGenerating = false;
-
-        async function generateImage() {
-            if (isGenerating) return;
-            
-            const prompt = document.getElementById('promptOutput').value.trim();
-            if (!prompt) {
-                showToast('请先生成或输入提示词');
-                return;
-            }
-
-            const generateBtn = document.getElementById('generateImageBtn');
-            const loading = document.getElementById('imageLoading');
-            const preview = document.getElementById('imagePreview');
-            const error = document.getElementById('imageError');
-            const actions = document.getElementById('imageActions');
-
-            // 隐藏之前的显示
-            preview.classList.remove('show');
-            error.classList.remove('show');
-            actions.classList.remove('show');
-            loading.classList.add('show');
-            generateBtn.disabled = true;
-            isGenerating = true;
-
-            currentPrompt = prompt;
-
-            try {
-                const response = await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ prompt }),
-                });
-
-                const data = await response.json();
-
-                loading.classList.remove('show');
-                generateBtn.disabled = false;
-
-                if (data.error) {
-                    error.textContent = '生成失败：' + data.error + (data.details ? ' - ' + JSON.stringify(data.details) : '');
-                    error.classList.add('show');
-                    console.error('API Error:', data);
-                    return;
-                }
-
-                if (data.image) {
-                    currentImageUrl = data.image;
-                    document.getElementById('generatedImage').src = data.image;
-                    preview.classList.add('show');
-                    actions.classList.add('show');
-                    showToast('图片生成成功！');
-                } else if (data.raw_response) {
-                    error.textContent = 'API返回格式未知：' + JSON.stringify(data.raw_response).substring(0, 200);
-                    error.classList.add('show');
-                    console.log('Raw response:', data.raw_response);
-                } else {
-                    error.textContent = '未返回图片数据，请查看控制台日志';
-                    error.classList.add('show');
-                }
-            } catch (err) {
-                loading.classList.remove('show');
-                generateBtn.disabled = false;
-                isGenerating = false;
-                console.error('Generate image error:', err);
-                error.textContent = '网络错误：' + err.message;
-                error.classList.add('show');
-            }
-        }
-
-        // 下载图片
-        function downloadImage() {
-            if (!currentImageUrl) {
-                showToast('没有可下载的图片');
-                return;
-            }
-
-            // 如果是 base64，直接下载
-            if (currentImageUrl.startsWith('data:')) {
-                const link = document.createElement('a');
-                link.href = currentImageUrl;
-                link.download = 'generated-image.png';
-                link.click();
-                showToast('图片下载中...');
-                return;
-            }
-
-            // 如果是 URL，先 fetch 再下载
-            fetch(currentImageUrl)
-                .then(response => response.blob())
-                .then(blob => {
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = 'generated-image.png';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(url);
-                    showToast('图片下载成功！');
-                })
-                .catch(err => {
-                    // 如果 fetch 失败，尝试直接打开链接
-                    window.open(currentImageUrl, '_blank');
-                    showToast('请右键图片另存为');
-                });
-        }
-
-        // 清空时也清空图片
-        function clearAll() {
-            document.getElementById('keywordInput').value = '';
-            document.getElementById('promptOutput').value = '';
-            document.getElementById('imagePreview').classList.remove('show');
-            document.getElementById('imageActions').classList.remove('show');
-            document.getElementById('imageError').classList.remove('show');
-            currentImageUrl = null;
-            currentPrompt = '';
-            showToast('已清空');
-        }
+    <script type="module">
+        import { init } from './src/app.js';
+        init();
     </script>
 </body>
 </html>
