@@ -14,8 +14,15 @@ module.exports = async function handler(req, res) {
   const apiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.chat/v1/image_generation';
   const model = process.env.MINIMAX_MODEL || 'image-01';
 
+  console.log('=== MiniMax Image Generation ===');
+  console.log('API URL:', apiUrl);
+  console.log('Model:', model);
+  console.log('Prompt:', prompt);
+  console.log('API Key exists:', !!apiKey);
+
   if (!apiKey) {
-    return res.status(500).json({ error: 'API key not configured' });
+    console.error('API key not configured');
+    return res.status(500).json({ error: 'API key not configured on server' });
   }
 
   try {
@@ -31,30 +38,54 @@ module.exports = async function handler(req, res) {
       }),
     });
 
+    console.log('Response status:', response.status);
+
+    const data = await response.json();
+    console.log('Response data:', JSON.stringify(data, null, 2));
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('MiniMax API error:', response.status, errorText);
       return res.status(response.status).json({ 
-        error: `API request failed: ${response.status}`,
-        details: errorText 
+        error: `API error: ${response.status}`,
+        details: data 
       });
     }
 
-    const data = await response.json();
-    console.log('MiniMax API response:', JSON.stringify(data));
+    // MiniMax M3 可能返回的格式
+    let imageUrl = null;
+    
+    // 尝试多种可能的返回格式
+    if (data.data && data.data[0]) {
+      imageUrl = data.data[0].url || data.data[0].b64_json || data.data[0].image_url;
+    } else if (data.images && data.images[0]) {
+      imageUrl = data.images[0].url || data.images[0].b64_json;
+    } else if (data.image_url) {
+      imageUrl = data.image_url;
+    } else if (data.url) {
+      imageUrl = data.url;
+    } else if (data.output) {
+      imageUrl = data.output;
+    }
 
-    // 返回图片 URL 或 base64
+    if (!imageUrl) {
+      console.log('No image URL found in response');
+      return res.status(200).json({
+        success: true,
+        raw_response: data,
+        error: 'No image in response'
+      });
+    }
+
     return res.status(200).json({
       success: true,
-      image: data.data?.[0]?.url || data.data?.[0]?.b64_json || null,
-      revised_prompt: data.data?.[0]?.revised_prompt || null,
+      image: imageUrl,
+      revised_prompt: data.revised_prompt || null,
     });
 
   } catch (error) {
     console.error('Generate image error:', error);
     return res.status(500).json({ 
-      error: 'Failed to generate image',
-      details: error.message 
+      error: 'Server error: ' + error.message,
+      stack: error.stack
     });
   }
 };

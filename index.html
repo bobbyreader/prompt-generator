@@ -1158,8 +1158,9 @@
                 generateBtn.disabled = false;
 
                 if (data.error) {
-                    error.textContent = '生成失败：' + data.error;
+                    error.textContent = '生成失败：' + data.error + (data.details ? ' - ' + JSON.stringify(data.details) : '');
                     error.classList.add('show');
+                    console.error('API Error:', data);
                     return;
                 }
 
@@ -1169,8 +1170,12 @@
                     preview.classList.add('show');
                     actions.classList.add('show');
                     showToast('图片生成成功！');
+                } else if (data.raw_response) {
+                    error.textContent = 'API返回格式未知：' + JSON.stringify(data.raw_response).substring(0, 200);
+                    error.classList.add('show');
+                    console.log('Raw response:', data.raw_response);
                 } else {
-                    error.textContent = '未返回图片数据，请重试';
+                    error.textContent = '未返回图片数据，请查看控制台日志';
                     error.classList.add('show');
                 }
             } catch (err) {
