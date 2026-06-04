@@ -16,7 +16,7 @@ module.exports = async function handler(req, res) {
 
   // 如果没有设置URL，使用默认的 MiniMax M3 API
   if (!apiUrl) {
-    apiUrl = 'https://api.minimax.chat/v1/image_generation';
+    apiUrl = 'http://123.56.67.77:9100/v1/image_generation';
   }
 
   console.log('=== MiniMax Image Generation ===');
