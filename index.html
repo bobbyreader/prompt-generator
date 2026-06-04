@@ -456,6 +456,142 @@
         .enhance-tag:hover {
             background: rgba(102, 126, 234, 0.5);
         }
+
+        /* 图片生成相关样式 */
+        .image-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .image-preview {
+            display: none;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .image-preview.show {
+            display: block;
+        }
+
+        .image-preview img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .image-loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .image-loading.show {
+            display: flex;
+        }
+
+        .image-loading .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .generate-image-btn {
+            width: 100%;
+            padding: 14px 20px;
+            font-size: 1rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #ff6b9d 0%, #c44569 100%);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .generate-image-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(255, 107, 157, 0.4);
+        }
+
+        .generate-image-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .image-actions {
+            display: none;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .image-actions.show {
+            display: flex;
+        }
+
+        .image-action-btn {
+            flex: 1;
+            padding: 10px 15px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: #fff;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(56, 239, 125, 0.4);
+        }
+
+        .regenerate-btn {
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .regenerate-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .image-error {
+            display: none;
+            padding: 20px;
+            background: rgba(245, 87, 108, 0.2);
+            border: 1px solid rgba(245, 87, 108, 0.3);
+            border-radius: 12px;
+            color: #f5576c;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .image-error.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -545,6 +681,36 @@
                         <span>🗑️</span>
                         <span>清空</span>
                     </button>
+                </div>
+
+                <!-- 图片生成区域 -->
+                <div class="image-section">
+                    <button class="generate-image-btn" onclick="generateImage()" id="generateImageBtn">
+                        <span>🎨</span>
+                        <span>生成图片</span>
+                    </button>
+
+                    <div class="image-loading" id="imageLoading">
+                        <div class="spinner"></div>
+                        <span style="margin-left: 15px;">正在生成图片...</span>
+                    </div>
+
+                    <div class="image-error" id="imageError"></div>
+
+                    <div class="image-preview" id="imagePreview">
+                        <img id="generatedImage" src="" alt="生成的图片" />
+                    </div>
+
+                    <div class="image-actions" id="imageActions">
+                        <button class="image-action-btn download-btn" onclick="downloadImage()">
+                            <span>📥</span>
+                            <span>下载</span>
+                        </button>
+                        <button class="image-action-btn regenerate-btn" onclick="generateImage()">
+                            <span>🔄</span>
+                            <span>重新生成</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -949,6 +1115,120 @@
             toast.textContent = message;
             toast.classList.add('show');
             setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+
+        // 生成图片
+        let currentImageUrl = null;
+        let currentPrompt = '';
+
+        async function generateImage() {
+            const prompt = document.getElementById('promptOutput').value.trim();
+            if (!prompt) {
+                showToast('请先生成或输入提示词');
+                return;
+            }
+
+            const generateBtn = document.getElementById('generateImageBtn');
+            const loading = document.getElementById('imageLoading');
+            const preview = document.getElementById('imagePreview');
+            const error = document.getElementById('imageError');
+            const actions = document.getElementById('imageActions');
+
+            // 隐藏之前的显示
+            preview.classList.remove('show');
+            error.classList.remove('show');
+            actions.classList.remove('show');
+            loading.classList.add('show');
+            generateBtn.disabled = true;
+
+            currentPrompt = prompt;
+
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt }),
+                });
+
+                const data = await response.json();
+
+                loading.classList.remove('show');
+                generateBtn.disabled = false;
+
+                if (data.error) {
+                    error.textContent = '生成失败：' + data.error;
+                    error.classList.add('show');
+                    return;
+                }
+
+                if (data.image) {
+                    currentImageUrl = data.image;
+                    document.getElementById('generatedImage').src = data.image;
+                    preview.classList.add('show');
+                    actions.classList.add('show');
+                    showToast('图片生成成功！');
+                } else {
+                    error.textContent = '未返回图片数据，请重试';
+                    error.classList.add('show');
+                }
+            } catch (err) {
+                loading.classList.remove('show');
+                generateBtn.disabled = false;
+                error.textContent = '网络错误：' + err.message;
+                error.classList.add('show');
+            }
+        }
+
+        // 下载图片
+        function downloadImage() {
+            if (!currentImageUrl) {
+                showToast('没有可下载的图片');
+                return;
+            }
+
+            // 如果是 base64，直接下载
+            if (currentImageUrl.startsWith('data:')) {
+                const link = document.createElement('a');
+                link.href = currentImageUrl;
+                link.download = 'generated-image.png';
+                link.click();
+                showToast('图片下载中...');
+                return;
+            }
+
+            // 如果是 URL，先 fetch 再下载
+            fetch(currentImageUrl)
+                .then(response => response.blob())
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = 'generated-image.png';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                    showToast('图片下载成功！');
+                })
+                .catch(err => {
+                    // 如果 fetch 失败，尝试直接打开链接
+                    window.open(currentImageUrl, '_blank');
+                    showToast('请右键图片另存为');
+                });
+        }
+
+        // 清空时也清空图片
+        function clearAll() {
+            document.getElementById('keywordInput').value = '';
+            document.getElementById('promptOutput').value = '';
+            document.getElementById('imagePreview').classList.remove('show');
+            document.getElementById('imageActions').classList.remove('show');
+            document.getElementById('imageError').classList.remove('show');
+            currentImageUrl = null;
+            currentPrompt = '';
+            showToast('已清空');
         }
     </script>
 </body>
