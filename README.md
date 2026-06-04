@@ -1,15 +1,16 @@
-# AI绘图提示词生成器
+# Lucky Girl的专家提示词系统
 
-一个简洁美观的 AI 绘图提示词生成工具，支持中英文双语。
+一个简洁美观的 AI 绘图提示词生成工具，支持一键生成专业级提示词和 AI 图片生成。
 
 ## 功能
 
-- 🎯 输入描述自动生成专业提示词
+- 🎯 输入描述自动生成工业级专家提示词
 - 🎨 多种风格选择（摄影/插画/动漫/概念/3D）
 - ✏️ 支持手动微调编辑
 - 📋 一键复制到剪贴板
 - 🚀 预设模板快速开始
 - 💡 常用提示词元素库
+- 🖼️ **一键生成 AI 图片**（Gemini 图片生成）
 
 ## 部署方式
 
@@ -36,27 +37,56 @@ vercel
 3. Source 选择 `main` 分支
 4. 域名在 Settings → Custom Domain 设置
 
-### 方式三：Cloudflare Pages
+## 环境变量配置
 
-1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
-2. 进入 Workers & Pages → 创建应用程序
-3. 选择「上传网页」
-4. 上传所有文件
-5. 设置自定义域名
+部署到 Vercel 后需要配置以下环境变量：
+
+| 变量名 | 必填 | 说明 |
+|--------|------|------|
+| `GEMINI_API_KEY` | ✅ | Google Gemini API Key |
+| `GEMINI_MODEL` | ❌ | 模型名称（默认：`gemini-3.1-flash-image-preview`） |
+
+### 获取 GEMINI_API_KEY
+
+1. 访问 [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. 点击 **Create API Key in new project**
+3. 复制生成的 Key
+
+### 推荐模型
+
+| 模型 | 说明 |
+|------|------|
+| `gemini-3.1-flash-image-preview` | 推荐，免费额度支持 |
+| `gemini-2.0-flash-exp` | 备选 |
 
 ## 文件结构
 
 ```
-├── index.html      # 主页面（完整单页应用）
-├── README.md       # 说明文档
-└── vercel.json    # Vercel 配置文件（可选）
+├── index.html      # 前端页面
+├── api/
+│   └── generate.js # 后端 API（图片生成）
+├── vercel.json     # Vercel 配置
+└── README.md       # 说明文档
 ```
 
 ## 使用说明
 
-1. 直接打开 `index.html` 即可在本地使用
-2. 无需后端，纯前端应用
-3. 支持所有现代浏览器
+### 提示词生成
+1. 输入描述或选择模板生成提示词
+2. 点击「生成提示词」按钮
+3. 复制提示词到其他 AI 绘图工具使用
+
+### 图片生成
+1. 生成或输入提示词
+2. 点击「🎨 生成图片」按钮
+3. 等待图片生成完成
+4. 下载或重新生成
+
+## 技术栈
+
+- 前端：原生 HTML/CSS/JavaScript
+- 后端：Node.js (Vercel Serverless Functions)
+- 图片生成：Google Gemini API
 
 ## 许可证
 
