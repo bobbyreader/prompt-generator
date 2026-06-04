@@ -41,9 +41,6 @@ module.exports = async function handler(req, res) {
               ]
             }
           ],
-          generationConfig: {
-            responseModalities: ["TEXT", "IMAGE"]
-          }
         }),
       }
     );
