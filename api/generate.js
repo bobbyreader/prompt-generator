@@ -11,8 +11,10 @@ module.exports = async function handler(req, res) {
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
+  const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
   console.log('=== Gemini Image Generation ===');
+  console.log('Model:', modelName);
   console.log('Prompt:', prompt.substring(0, 100));
   console.log('API Key exists:', !!apiKey);
 
@@ -23,7 +25,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
