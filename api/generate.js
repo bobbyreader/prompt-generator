@@ -11,7 +11,7 @@ module.exports = async function handler(req, res) {
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
-  const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const modelName = process.env.GEMINI_MODEL || 'gemini-3.1-flash-image';
 
   console.log('=== Gemini Image Generation ===');
   console.log('Model:', modelName);
