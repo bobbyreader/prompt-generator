@@ -16,25 +16,34 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateImages?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: prompt,
-          numberOfImages: 1,
-          aspectRatio: "1:1",
-          outputMimeType: "image/png"
-        }),
-      }
-    );
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateImages?key=${apiKey}`;
 
-    const data = await response.json();
-    console.log('Status:', response.status);
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        numberOfImages: 1,
+        aspectRatio: "1:1",
+        outputMimeType: "image/png"
+      }),
+    });
+
+    const responseText = await response.text();
+    console.log('Status:', response.status, 'Length:', responseText.length);
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: data.error?.message || 'API failed', details: data });
+      return res.status(response.status).json({ error: 'API failed', response: responseText.substring(0, 300) });
+    }
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      return res.status(500).json({ error: 'Invalid JSON', response_preview: responseText.substring(0, 300) });
     }
 
     let imageBase64 = null;
