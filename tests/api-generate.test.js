@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import handler from '../api/generate.js';
 
 function createRes() {
     return {
@@ -21,13 +20,14 @@ describe('api/generate handler', () => {
         vi.restoreAllMocks();
         vi.resetModules();
         process.env.GEMINI_API_KEY = 'test-key';
+        process.env.AGNES_API_KEY = 'agnes-key';
         delete process.env.GEMINI_MODEL;
         delete process.env.AI_IMAGE_PROVIDER;
-        delete process.env.AGNES_API_KEY;
         delete process.env.AGNES_IMAGE_MODEL;
     });
 
     it('rejects empty prompts after trimming', async () => {
+        const { default: handler } = await import('../api/generate.js');
         const req = { method: 'POST', body: { prompt: '   ' } };
         const res = createRes();
 
@@ -46,13 +46,14 @@ describe('api/generate handler', () => {
             }))
         });
 
+        const { default: handler } = await import('../api/generate.js');
         const req = { method: 'POST', body: { prompt: 'draw a fox' } };
         const res = createRes();
 
         await handler(req, res);
 
         expect(res.statusCode).toBe(500);
-        expect(res.body.error).toBe('Image generation request failed');
+        expect(res.body.error).toBe('Agnes image generation request failed');
         expect(res.body.details).toContain('quota exceeded');
     });
 
@@ -61,19 +62,13 @@ describe('api/generate handler', () => {
             ok: true,
             status: 200,
             text: () => Promise.resolve(JSON.stringify({
-                candidates: [{
-                    content: {
-                        parts: [{
-                            inlineData: {
-                                mimeType: 'image/png',
-                                data: 'abc123'
-                            }
-                        }]
-                    }
+                data: [{
+                    b64_json: 'abc123'
                 }]
             }))
         });
 
+        const { default: handler } = await import('../api/generate.js');
         const req = { method: 'POST', body: { prompt: 'draw a fox' } };
         const res = createRes();
 
@@ -89,12 +84,11 @@ describe('api/generate handler', () => {
             ok: true,
             status: 200,
             text: () => Promise.resolve(JSON.stringify({
-                candidates: [{
-                    finishReason: 'SAFETY'
-                }]
+                error: 'SAFETY'
             }))
         });
 
+        const { default: handler } = await import('../api/generate.js');
         const req = { method: 'POST', body: { prompt: 'draw a fox' } };
         const res = createRes();
 
@@ -138,6 +132,44 @@ describe('api/generate handler', () => {
         expect(res.statusCode).toBe(200);
         expect(res.body.success).toBe(true);
         expect(res.body.image).toBe('https://cdn.example.com/generated.png');
-        expect(res.body.modelUsed).toBe('agnes-image-1.2');
+        expect(res.body.modelUsed).toBe('agnes-image-2.0-flash');
+    });
+
+    it('can still use Gemini when explicitly configured as fallback', async () => {
+        process.env.AI_IMAGE_PROVIDER = 'gemini';
+
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            text: () => Promise.resolve(JSON.stringify({
+                candidates: [{
+                    content: {
+                        parts: [{
+                            inlineData: {
+                                mimeType: 'image/png',
+                                data: 'gemini123'
+                            }
+                        }]
+                    }
+                }]
+            }))
+        });
+        global.fetch = fetchMock;
+
+        const { default: geminiHandler } = await import('../api/generate.js');
+        const req = { method: 'POST', body: { prompt: 'draw a fox' } };
+        const res = createRes();
+
+        await geminiHandler(req, res);
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('https://generativelanguage.googleapis.com/v1beta/models/'),
+            expect.objectContaining({
+                method: 'POST'
+            })
+        );
+        expect(res.statusCode).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.image).toBe('data:image/png;base64,gemini123');
     });
 });

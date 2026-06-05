@@ -3,7 +3,7 @@ const MAX_PROMPT_LENGTH = 4000;
 
 /* ==================== Provider 配置 ==================== */
 function getImageProvider() {
-  return (process.env.AI_IMAGE_PROVIDER || 'gemini').trim().toLowerCase();
+  return (process.env.AI_IMAGE_PROVIDER || 'agnes').trim().toLowerCase();
 }
 
 /* ==================== Gemini Provider ==================== */
@@ -34,7 +34,7 @@ function getAgnesApiKey() {
 }
 
 function getAgnesModel() {
-  return process.env.AGNES_IMAGE_MODEL || 'agnes-image-1.2';
+  return process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash';
 }
 
 function extractAgnesImageData(data) {
@@ -171,7 +171,7 @@ module.exports = async function handler(req, res) {
         });
       }
     } else {
-      // Gemini Provider (default)
+      // Gemini Provider (fallback)
       const apiKey = getGeminiApiKey();
       if (!apiKey) {
         return res.status(500).json({ error: 'API key not configured' });
