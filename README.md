@@ -81,14 +81,27 @@ GitHub Pages 只能部署静态前端，不能运行 `api/generate.js`。使用 
 
 | 变量名 | 必填 | 说明 |
 |--------|------|------|
-| `GEMINI_API_KEY` | 是 | Google Gemini API Key |
+| `AI_IMAGE_PROVIDER` | 否 | 图片生成 Provider，默认 `gemini`，可选 `agnes` |
+| `GEMINI_API_KEY` | 是（gemini模式下）| Google Gemini API Key |
 | `GEMINI_MODEL` | 否 | 图片生成模型名称，默认：`gemini-3.1-flash-image-preview` |
+| `AGNES_API_KEY` | 是（agnes模式下）| Agnes AI API Key |
+| `AGNES_IMAGE_MODEL` | 否 | Agnes 图像模型，默认：`agnes-image-1.2` |
 
 ### 获取 GEMINI_API_KEY
 
 1. 访问 Google AI Studio 的 API Key 页面。
 2. 点击 **Create API Key in new project**。
 3. 复制生成的 Key，并配置到 Vercel 环境变量中。
+
+### 获取 AGNES_API_KEY（可选）
+
+Agnes AI 提供免费无限期的文生图 API。
+
+1. 访问 [Agnes AI Platform](https://platform.agnes-ai.com/) 注册账号。
+2. 登录后在 Dashboard 创建 API Key。
+3. 配置环境变量：
+   - `AI_IMAGE_PROVIDER=agnes`
+   - `AGNES_API_KEY=你的API密钥`
 
 ### 模型配置
 
