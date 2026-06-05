@@ -6,6 +6,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "src/**/*",
+      "use": "@vercel/static"
+    },
+    {
       "src": "index.html",
       "use": "@vercel/static"
     }
