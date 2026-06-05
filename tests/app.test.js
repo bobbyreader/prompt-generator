@@ -17,6 +17,11 @@ function buildDom() {
         <button id="generateImageBtn"></button>
         <div id="imageLoading"></div>
         <img id="generatedImage" alt="" />
+        <label><input type="radio" name="imageSize" value="1024x1024" checked /></label>
+        <label><input type="radio" name="imageSize" value="1536x1024" /></label>
+        <label><input type="radio" name="imageSize" value="1024x1536" /></label>
+        <label><input type="radio" name="imageSize" value="1536x864" /></label>
+        <label><input type="radio" name="imageSize" value="864x1536" /></label>
         <div id="historyList"></div>
         <div id="favoritesList"></div>
         <div id="statTotal"></div>
@@ -72,6 +77,7 @@ describe('app interactions', () => {
         expect(stats.byStyle.photography).toBe(1);
         expect(stats.byStyle.portrait).toBeUndefined();
         expect(history[0].style).toBe('photography');
+        expect(history[0].imageSettings.size).toBe('1024x1024');
     });
 
     it('updates aria state when clicking a style chip', async () => {
@@ -105,7 +111,13 @@ describe('app interactions', () => {
 
     it('history action delegation can load a saved prompt without crashing', async () => {
         localStorage.setItem('prompt_history', JSON.stringify([
-            { id: 1, text: 'saved prompt', style: 'photography', time: Date.now() }
+            {
+                id: 1,
+                text: 'saved prompt',
+                style: 'photography',
+                imageSettings: { size: '1024x1536' },
+                time: Date.now()
+            }
         ]));
 
         const { init } = await import('../src/app.js');
@@ -119,6 +131,7 @@ describe('app interactions', () => {
         document.querySelector('.item-btn').click();
 
         expect(document.getElementById('promptOutput').value).toBe('saved prompt');
+        expect(document.querySelector('input[name="imageSize"][value="1024x1536"]').checked).toBe(true);
     });
 
     it('shows generated image when API succeeds', async () => {
@@ -133,13 +146,33 @@ describe('app interactions', () => {
         const { init } = await import('../src/app.js');
         init();
         document.getElementById('promptOutput').value = 'draw a fox';
+        document.querySelector('input[name="imageSize"][value="1536x1024"]').click();
 
         await window.generateImage();
 
+        expect(global.fetch).toHaveBeenCalledWith('/api/generate', expect.objectContaining({
+            body: JSON.stringify({
+                prompt: 'draw a fox',
+                size: '1536x1024'
+            })
+        }));
         expect(document.getElementById('generatedImage').src).toContain('data:image/png;base64,abc123');
         expect(document.getElementById('imagePreview').classList.contains('show')).toBe(true);
         expect(document.getElementById('imageActions').classList.contains('show')).toBe(true);
         expect(document.getElementById('generateImageBtn').disabled).toBe(false);
+    });
+
+    it('favorites preserve image size metadata when saving a prompt', async () => {
+        const { init } = await import('../src/app.js');
+        init();
+
+        document.getElementById('promptOutput').value = 'poster prompt';
+        document.querySelector('input[name="imageSize"][value="864x1536"]').click();
+
+        window.saveFavorite();
+
+        const favorites = JSON.parse(localStorage.getItem('prompt_favorites'));
+        expect(favorites[0].imageSettings.size).toBe('864x1536');
     });
 
     it('shows provider error details when API fails', async () => {

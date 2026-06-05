@@ -1,5 +1,12 @@
 const REQUEST_TIMEOUT_MS = 45000;
 const MAX_PROMPT_LENGTH = 4000;
+const ALLOWED_IMAGE_SIZES = new Set([
+  '1024x1024',
+  '1536x1024',
+  '1024x1536',
+  '1536x864',
+  '864x1536'
+]);
 
 /* ==================== Provider 配置 ==================== */
 function getImageProvider() {
@@ -35,6 +42,15 @@ function getAgnesApiKey() {
 
 function getAgnesModel() {
   return process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash';
+}
+
+function normalizeImageSize(size) {
+  if (typeof size !== 'string') {
+    return '1024x1024';
+  }
+
+  const normalized = size.trim();
+  return ALLOWED_IMAGE_SIZES.has(normalized) ? normalized : '1024x1024';
 }
 
 function extractAgnesImageData(data) {
@@ -104,6 +120,7 @@ module.exports = async function handler(req, res) {
   }
 
   const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+  const imageSize = normalizeImageSize(req.body?.size);
   if (!prompt) {
     return res.status(400).json({ error: 'Prompt is required' });
   }
@@ -138,7 +155,7 @@ module.exports = async function handler(req, res) {
         body: JSON.stringify({
           model: modelUsed,
           prompt,
-          size: '1024x1024'
+          size: imageSize
         })
       });
 
@@ -229,7 +246,8 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       success: true,
       image: imageData.url || `data:${imageData.mimeType};base64,${imageData.data}`,
-      modelUsed
+      modelUsed,
+      size: imageSize
     });
   } catch (error) {
     const isTimeout = error.name === 'AbortError';

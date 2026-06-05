@@ -110,3 +110,34 @@ export const enhancements = [
     'emotional atmosphere',
     'award-winning composition'
 ];
+
+/* ==================== 图片生成规格 ==================== */
+export const imageSizePresets = [
+    {
+        value: '1024x1024',
+        label: '1:1 方图',
+        description: '适合头像、商品主图和社媒配图'
+    },
+    {
+        value: '1536x1024',
+        label: '3:2 横图',
+        description: '适合横版海报、封面和场景图'
+    },
+    {
+        value: '1024x1536',
+        label: '2:3 竖图',
+        description: '适合手机壁纸、人物海报和封面图'
+    },
+    {
+        value: '1536x864',
+        label: '16:9 横屏',
+        description: '适合演示封面、视频头图和横幅'
+    },
+    {
+        value: '864x1536',
+        label: '9:16 竖屏',
+        description: '适合小红书、短视频和手机长图'
+    }
+];
+
+export const DEFAULT_IMAGE_SIZE = imageSizePresets[0].value;

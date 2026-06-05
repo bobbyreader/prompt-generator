@@ -126,6 +126,9 @@ h1 {
 @media (max-width: 900px) {
     .main-layout { grid-template-columns: 1fr; }
     .history-favorites-section { flex-direction: column; }
+    .image-settings-head { flex-direction: column; align-items: flex-start; }
+    .image-settings-hint { text-align: left; }
+    .image-size-grid { grid-template-columns: 1fr; }
 }
 
 /* ==================== 面板 ==================== */
@@ -443,6 +446,84 @@ h1 {
     margin-top: 20px;
     padding-top: 20px;
     border-top: 1px solid var(--border-color);
+}
+
+.image-settings {
+    margin-bottom: 18px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+}
+
+.image-settings-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.image-settings-hint {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-align: right;
+}
+
+.image-size-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.image-size-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 96px;
+    padding: 14px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.image-size-card:hover {
+    background: var(--bg-input-focus);
+    border-color: rgba(102, 126, 234, 0.45);
+    transform: translateY(-1px);
+}
+
+.image-size-card input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.image-size-card.selected {
+    border-color: transparent;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.24), rgba(255, 107, 157, 0.2));
+    box-shadow: 0 10px 24px rgba(102, 126, 234, 0.16);
+}
+
+.image-size-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.image-size-meta {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.image-size-desc {
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-muted);
 }
 
 .image-preview {

@@ -133,6 +133,73 @@ describe('api/generate handler', () => {
         expect(res.body.success).toBe(true);
         expect(res.body.image).toBe('https://cdn.example.com/generated.png');
         expect(res.body.modelUsed).toBe('agnes-image-2.0-flash');
+        expect(res.body.size).toBe('1024x1024');
+    });
+
+    it('passes through a supported custom image size for Agnes', async () => {
+        process.env.AI_IMAGE_PROVIDER = 'agnes';
+
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            text: () => Promise.resolve(JSON.stringify({
+                data: [{
+                    url: 'https://cdn.example.com/generated-wide.png'
+                }]
+            }))
+        });
+        global.fetch = fetchMock;
+
+        const { default: handler } = await import('../api/generate.js');
+        const req = { method: 'POST', body: { prompt: 'draw a fox', size: '1536x1024' } };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://apihub.agnes-ai.com/v1/images/generations',
+            expect.objectContaining({
+                body: JSON.stringify({
+                    model: 'agnes-image-2.0-flash',
+                    prompt: 'draw a fox',
+                    size: '1536x1024'
+                })
+            })
+        );
+        expect(res.body.size).toBe('1536x1024');
+    });
+
+    it('falls back to the default image size when an unsupported value is sent', async () => {
+        process.env.AI_IMAGE_PROVIDER = 'agnes';
+
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            text: () => Promise.resolve(JSON.stringify({
+                data: [{
+                    url: 'https://cdn.example.com/generated-default.png'
+                }]
+            }))
+        });
+        global.fetch = fetchMock;
+
+        const { default: handler } = await import('../api/generate.js');
+        const req = { method: 'POST', body: { prompt: 'draw a fox', size: '999x999' } };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://apihub.agnes-ai.com/v1/images/generations',
+            expect.objectContaining({
+                body: JSON.stringify({
+                    model: 'agnes-image-2.0-flash',
+                    prompt: 'draw a fox',
+                    size: '1024x1024'
+                })
+            })
+        );
+        expect(res.body.size).toBe('1024x1024');
     });
 
     it('can still use Gemini when explicitly configured as fallback', async () => {

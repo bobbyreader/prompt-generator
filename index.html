@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucky Girl的专家提示词系统</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/src/styles.css">
+    <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
     <div aria-live="polite" aria-atomic="true" id="ariaAnnounce" class="sr-only"></div>
@@ -101,6 +101,45 @@
                 </div>
 
                 <div class="image-section" aria-label="图片生成">
+                    <div class="image-settings" aria-labelledby="imageSettingsLabel">
+                        <div class="image-settings-head">
+                            <label class="input-label" id="imageSettingsLabel">图片比例与尺寸</label>
+                            <span class="image-settings-hint">当前生产默认走 Agnes，建议按用途选择比例</span>
+                        </div>
+                        <div class="image-size-grid" role="radiogroup" aria-label="图片尺寸">
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="1024x1024" checked />
+                                <span class="image-size-title">1:1 方图</span>
+                                <span class="image-size-meta">1024 × 1024</span>
+                                <span class="image-size-desc">头像、商品主图、通用社媒图</span>
+                            </label>
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="1536x1024" />
+                                <span class="image-size-title">3:2 横图</span>
+                                <span class="image-size-meta">1536 × 1024</span>
+                                <span class="image-size-desc">横版封面、场景图、海报横图</span>
+                            </label>
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="1024x1536" />
+                                <span class="image-size-title">2:3 竖图</span>
+                                <span class="image-size-meta">1024 × 1536</span>
+                                <span class="image-size-desc">人物海报、手机壁纸、封面图</span>
+                            </label>
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="1536x864" />
+                                <span class="image-size-title">16:9 横屏</span>
+                                <span class="image-size-meta">1536 × 864</span>
+                                <span class="image-size-desc">视频封面、演示横幅、头图</span>
+                            </label>
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="864x1536" />
+                                <span class="image-size-title">9:16 竖屏</span>
+                                <span class="image-size-meta">864 × 1536</span>
+                                <span class="image-size-desc">短视频、小红书、手机长图</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <button class="generate-image-btn" onclick="generateImage()" id="generateImageBtn"
                             aria-label="使用 AI 生成图片">
                         <span>🎨</span><span>生成图片</span>
@@ -201,7 +240,7 @@
     <div class="toast" id="toast">已复制到剪贴板！</div>
 
     <script type="module">
-        import { init } from '/src/app.js';
+        import { init } from './src/app.js';
         init();
     </script>
 </body>

@@ -1,6 +1,12 @@
 /* ==================== 核心逻辑模块 ==================== */
 
-import { styleEnhancers, promptTemplates, variables, enhancements } from './data.js';
+import {
+    styleEnhancers,
+    promptTemplates,
+    variables,
+    enhancements,
+    DEFAULT_IMAGE_SIZE
+} from './data.js';
 import {
     toggleTheme, initTheme,
     addToHistory, incrementStats, addToFavorites,
@@ -16,6 +22,7 @@ let currentImageUrl = null;
 let currentPrompt = '';
 let isGenerating = false;
 let activeImageRequestId = 0;
+let currentImageSize = DEFAULT_IMAGE_SIZE;
 
 const TEMPLATE_STYLE_MAP = {
     portrait: 'photography',
@@ -80,6 +87,21 @@ function setActiveStyle(style) {
         chip.setAttribute('aria-checked', isActive ? 'true' : 'false');
         chip.tabIndex = isActive ? 0 : -1;
     });
+}
+
+function setActiveImageSize(size) {
+    currentImageSize = size;
+    document.querySelectorAll('input[name="imageSize"]').forEach(input => {
+        const isActive = input.value === size;
+        input.checked = isActive;
+        input.closest('.image-size-card')?.classList.toggle('selected', isActive);
+    });
+}
+
+function getCurrentImageSettings() {
+    return {
+        size: currentImageSize
+    };
 }
 
 function resetImageUi() {
@@ -167,6 +189,14 @@ function bindEvents() {
         });
     });
 
+    document.querySelectorAll('input[name="imageSize"]').forEach(input => {
+        input.addEventListener('change', () => {
+            if (input.checked) {
+                setActiveImageSize(input.value);
+            }
+        });
+    });
+
     // 回车生成
     document.getElementById('keywordInput').addEventListener('keypress', e => {
         if (e.key === 'Enter') generatePrompt();
@@ -247,7 +277,7 @@ function generatePrompt() {
         showToast('提示词已生成！');
 
         const genStyle = currentStyle === 'auto' ? 'photography' : currentStyle;
-        addToHistory(prompt, genStyle);
+        addToHistory(prompt, genStyle, getCurrentImageSettings());
         incrementStats(genStyle);
     }, 600);
 }
@@ -316,7 +346,7 @@ function saveFavorite() {
         showToast('没有可收藏的内容');
         return;
     }
-    addToFavorites(prompt, currentStyle);
+    addToFavorites(prompt, currentStyle, getCurrentImageSettings());
     showToast('已收藏 ⭐');
     announce('提示词已收藏');
 }
@@ -332,6 +362,7 @@ function clearAll() {
     currentPrompt = '';
     isGenerating = false;
     activeImageRequestId++;
+    setActiveImageSize(DEFAULT_IMAGE_SIZE);
     showToast('已清空');
 }
 
@@ -344,7 +375,7 @@ function useTemplate(type) {
     const templates = promptTemplates[type] || promptTemplates.portrait;
     const prompt = fillTemplate(getRandom(templates), type);
     document.getElementById('promptOutput').value = prompt;
-    addToHistory(prompt, displayStyle);
+    addToHistory(prompt, displayStyle, getCurrentImageSettings());
     incrementStats(displayStyle);
     showToast('已应用模板：' + type);
 }
@@ -385,7 +416,10 @@ async function generateImage() {
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt }),
+            body: JSON.stringify({
+                prompt,
+                size: currentImageSize
+            }),
             signal: controller.signal
         });
 
@@ -483,6 +517,7 @@ export function init() {
     createParticles();
     initTheme();
     bindEvents();
+    setActiveImageSize(DEFAULT_IMAGE_SIZE);
     renderHistory();
     renderFavorites();
     updateStats();

@@ -8,6 +8,9 @@ export const STORAGE_KEYS = {
 };
 
 const MAX_HISTORY = 50;
+const DEFAULT_IMAGE_SETTINGS = {
+    size: '1024x1024'
+};
 
 // 运行时注入，不形成循环依赖
 let _showToast = () => {};
@@ -35,6 +38,25 @@ function save(key, val) {
     } catch {}
 }
 
+function normalizeImageSettings(settings) {
+    return {
+        ...DEFAULT_IMAGE_SETTINGS,
+        ...(settings && typeof settings === 'object' ? settings : {})
+    };
+}
+
+function normalizePromptItem(item) {
+    return {
+        ...(item || {}),
+        imageSettings: normalizeImageSettings(item?.imageSettings)
+    };
+}
+
+function formatImageSettingsMeta(item) {
+    const size = item?.imageSettings?.size;
+    return size ? ` · ${size}` : '';
+}
+
 /* ==================== 主题 ==================== */
 export function initTheme() {
     const saved = load(STORAGE_KEYS.THEME, 'dark');
@@ -57,9 +79,15 @@ export function updateThemeUI() {
 }
 
 /* ==================== 历史记录 ==================== */
-export function addToHistory(prompt, style) {
+export function addToHistory(prompt, style, imageSettings = DEFAULT_IMAGE_SETTINGS) {
     const history = load(STORAGE_KEYS.HISTORY, []);
-    history.unshift({ text: prompt, style, time: Date.now(), id: Date.now() });
+    history.unshift(normalizePromptItem({
+        text: prompt,
+        style,
+        imageSettings,
+        time: Date.now(),
+        id: Date.now()
+    }));
     if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
     save(STORAGE_KEYS.HISTORY, history);
     renderHistory();
@@ -73,11 +101,13 @@ export function renderHistory() {
         container.innerHTML = '<div class="empty-state">暂无历史记录</div>';
         return;
     }
-    container.innerHTML = history.map(item => `
+    container.innerHTML = history.map(rawItem => {
+        const item = normalizePromptItem(rawItem);
+        return `
         <div class="history-item">
             <div>
                 <div class="history-item-text">${escapeHtml(item.text)}</div>
-                <div class="history-item-meta">${item.style} · ${formatTime(item.time)}</div>
+                <div class="history-item-meta">${item.style}${formatImageSettingsMeta(item)} · ${formatTime(item.time)}</div>
             </div>
             <div class="item-actions">
                 <button class="item-btn use-btn" data-id="${item.id}" data-action="use">使用</button>
@@ -85,16 +115,19 @@ export function renderHistory() {
                 <button class="item-btn del-btn" data-id="${item.id}" data-action="del">×</button>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 export function useHistory(id) {
     const history = load(STORAGE_KEYS.HISTORY, []);
-    const item = history.find(h => h.id == id);
+    const item = normalizePromptItem(history.find(h => h.id == id));
     if (item) {
         document.getElementById('promptOutput').value = item.text;
         const chip = document.querySelector(`.style-chip[data-style="${item.style}"]`);
         if (chip) chip.click();
+        const sizeInput = document.querySelector(`input[name="imageSize"][value="${item.imageSettings.size}"]`);
+        if (sizeInput) sizeInput.click();
         _showToast('已加载历史提示词');
         _announce('已从历史记录加载提示词');
     }
@@ -102,9 +135,9 @@ export function useHistory(id) {
 
 export function historyToFavorite(id) {
     const history = load(STORAGE_KEYS.HISTORY, []);
-    const item = history.find(h => h.id == id);
+    const item = normalizePromptItem(history.find(h => h.id == id));
     if (item) {
-        addToFavorites(item.text, item.style);
+        addToFavorites(item.text, item.style, item.imageSettings);
         _showToast('已收藏');
     }
 }
@@ -125,10 +158,16 @@ export function clearHistory() {
 }
 
 /* ==================== 收藏夹 ==================== */
-export function addToFavorites(text, style) {
+export function addToFavorites(text, style, imageSettings = DEFAULT_IMAGE_SETTINGS) {
     const favorites = load(STORAGE_KEYS.FAVORITES, []);
     if (favorites.some(f => f.text === text)) return;
-    favorites.unshift({ text, style, time: Date.now(), id: Date.now() });
+    favorites.unshift(normalizePromptItem({
+        text,
+        style,
+        imageSettings,
+        time: Date.now(),
+        id: Date.now()
+    }));
     save(STORAGE_KEYS.FAVORITES, favorites);
     renderFavorites();
 }
@@ -140,24 +179,30 @@ export function renderFavorites() {
         container.innerHTML = '<div class="empty-state">暂无收藏</div>';
         return;
     }
-    container.innerHTML = favorites.map(item => `
+    container.innerHTML = favorites.map(rawItem => {
+        const item = normalizePromptItem(rawItem);
+        return `
         <div class="favorite-item">
             <div class="favorite-item-text">${escapeHtml(item.text)}</div>
+            <div class="history-item-meta">${item.style}${formatImageSettingsMeta(item)}</div>
             <div class="item-actions">
                 <button class="item-btn use-btn" data-id="${item.id}" data-action="useFav">使用</button>
                 <button class="item-btn del-btn" data-id="${item.id}" data-action="delFav">×</button>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 export function useFavorite(id) {
     const favorites = load(STORAGE_KEYS.FAVORITES, []);
-    const item = favorites.find(f => f.id == id);
+    const item = normalizePromptItem(favorites.find(f => f.id == id));
     if (item) {
         document.getElementById('promptOutput').value = item.text;
         const chip = document.querySelector(`.style-chip[data-style="${item.style}"]`);
         if (chip) chip.click();
+        const sizeInput = document.querySelector(`input[name="imageSize"][value="${item.imageSettings.size}"]`);
+        if (sizeInput) sizeInput.click();
         _showToast('已加载收藏');
         _announce('已从收藏加载提示词');
     }
@@ -227,4 +272,3 @@ export function formatTime(ts) {
     if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
     return new Date(ts).toLocaleDateString('zh-CN');
 }
-
