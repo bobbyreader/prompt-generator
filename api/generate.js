@@ -1,241 +1,119 @@
-const REQUEST_TIMEOUT_MS = 45000;
+/* /api/generate — 生图。主路：用户小主机上的 9router（OpenAI 兼容接口）；
+ * 兜底：Agnes 图片。两把 Key 都只读环境变量，绝不下发前端。
+ * 环境变量：
+ *   NINEROUTER_API_KEY   9router 远程访问 Key
+ *   NINEROUTER_BASE_URL  默认 https://ai.leobobby.dpdns.org/v1
+ *   IMAGE_MODEL          默认 ag/gemini-3.8-flash-high
+ *   AGNES_API_KEY        兜底用（与 /api/prompt 共用）
+ *   AGNES_IMAGE_MODEL    默认 agnes-image-2.0-flash
+ * 请求：POST { prompt, size, negative? }
+ * 响应：{ success, image, modelUsed, provider, size }
+ */
+const REQUEST_TIMEOUT_MS = 240000;
 const MAX_PROMPT_LENGTH = 4000;
 
-/* ==================== Provider 配置 ==================== */
-function getImageProvider() {
-  return (process.env.AI_IMAGE_PROVIDER || 'agnes').trim().toLowerCase();
-}
-
-/* ==================== Gemini Provider ==================== */
-function getGeminiApiKey() {
-  return process.env.GEMINI_API_KEY;
-}
-
-function getGeminiModel() {
-  return process.env.GEMINI_MODEL || 'gemini-3.1-flash-image-preview';
-}
-
-function extractGeminiImageData(payload) {
-  const parts = payload?.candidates?.[0]?.content?.parts || [];
-  for (const part of parts) {
-    if (part.inlineData?.data) {
-      return {
-        mimeType: part.inlineData.mimeType || 'image/png',
-        data: part.inlineData.data
-      };
-    }
+async function fetchOnce(url, options, timeoutMs = REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
   }
-  return null;
-}
-
-/* ==================== Agnes Provider ==================== */
-function getAgnesApiKey() {
-  return process.env.AGNES_API_KEY;
-}
-
-function getAgnesModel() {
-  return process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash';
-}
-
-function extractAgnesImageData(data) {
-  const item = data?.data?.[0];
-  if (!item) return null;
-
-  if (item.b64_json) {
-    return {
-      mimeType: 'image/png',
-      data: item.b64_json
-    };
-  }
-
-  if (item.url) {
-    return {
-      url: item.url
-    };
-  }
-
-  return null;
 }
 
 function parseJsonSafe(text) {
-  try {
-    return text ? JSON.parse(text) : null;
-  } catch {
-    return null;
-  }
+  try { return text ? JSON.parse(text) : null; } catch { return null; }
 }
 
-async function fetchWithRetry(url, options, retries = 2, delay = 1500) {
-  for (let i = 0; i <= retries; i++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(new Error('Request timeout')), REQUEST_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal
-      });
-
-      if (response.status === 429 && i < retries) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-        continue;
-      }
-
-      return response;
-    } catch (error) {
-      if (i < retries && error.name !== 'AbortError') {
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-        continue;
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+function extractImage(data) {
+  const item = data?.data?.[0];
+  if (!item) return null;
+  if (item.url) return item.url;
+  if (item.b64_json) {
+    // 按魔数判断真实格式：/9j/ 开头是 JPEG，iVBOR 是 PNG（9router 实测返回 JPEG）
+    const mime = item.b64_json.startsWith('/9j/') ? 'image/jpeg'
+      : item.b64_json.startsWith('iVBOR') ? 'image/png' : 'image/png';
+    return `data:${mime};base64,${item.b64_json}`;
   }
+  return null;
+}
 
-  throw new Error('Retry limit exceeded');
+async function generateVia9Router(prompt, size) {
+  const apiKey = process.env.NINEROUTER_API_KEY;
+  if (!apiKey) return null; // 未配置则跳过主路
+  const base = (process.env.NINEROUTER_BASE_URL || 'https://ai.leobobby.dpdns.org/v1').replace(/\/$/, '');
+  const model = process.env.IMAGE_MODEL || 'ag/gemini-3.8-flash-high';
+  const resp = await fetchOnce(`${base}/images/generations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model, prompt, size })
+  });
+  const text = await resp.text();
+  const data = parseJsonSafe(text);
+  if (!resp.ok) {
+    throw new Error(`9router HTTP ${resp.status}: ${(data?.error?.message || text).slice(0, 200)}`);
+  }
+  const image = extractImage(data);
+  if (!image) throw new Error('9router returned no image');
+  return { image, modelUsed: model, provider: '9router' };
+}
+
+async function generateViaAgnes(prompt, size) {
+  const apiKey = process.env.AGNES_API_KEY;
+  if (!apiKey) return null;
+  const model = process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash';
+  const resp = await fetchOnce('https://apihub.agnes-ai.com/v1/images/generations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model, prompt, size })
+  });
+  const text = await resp.text();
+  const data = parseJsonSafe(text);
+  if (!resp.ok) {
+    throw new Error(`Agnes HTTP ${resp.status}: ${(data?.error?.message || text).slice(0, 200)}`);
+  }
+  const image = extractImage(data);
+  if (!image) throw new Error('Agnes returned no image');
+  return { image, modelUsed: model, provider: 'agnes' };
 }
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-
   const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
-  if (!prompt) {
-    return res.status(400).json({ error: 'Prompt is required' });
-  }
-
+  if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
   if (prompt.length > MAX_PROMPT_LENGTH) {
-    return res.status(400).json({
-      error: `Prompt is too long. Keep it under ${MAX_PROMPT_LENGTH} characters.`
-    });
+    return res.status(400).json({ error: `Prompt is too long. Keep it under ${MAX_PROMPT_LENGTH} characters.` });
   }
+  const size = typeof req.body?.size === 'string' && /^\d+x\d+$/.test(req.body.size) ? req.body.size : '1024x1024';
+  const negative = typeof req.body?.negative === 'string' ? req.body.negative.trim() : '';
+  const fullPrompt = negative ? `${prompt}\n\nAvoid: ${negative}` : prompt;
 
-  try {
-    let imageData;
-    let modelUsed;
-    const provider = getImageProvider();
-
-    if (provider === 'agnes') {
-      // Agnes AI Provider
-      const apiKey = getAgnesApiKey();
-      if (!apiKey) {
-        return res.status(500).json({ error: 'Agnes API key not configured. Set AGNES_API_KEY environment variable.' });
+  // 路由（2026-10-23 实测依据）：9router 固定输出 1024×1024 JPEG、不吃 size，
+  // 但只要 15–20 秒且稳定；Agnes 能按比例出图但耗时波动大（9–109 秒）。
+  // 所以 1:1 走 9router 主路，非方形走 Agnes 主路，失败互为兜底。
+  const providers = size === '1024x1024'
+    ? [generateVia9Router, generateViaAgnes]
+    : [generateViaAgnes, generateVia9Router];
+  const errors = [];
+  for (const provider of providers) {
+    try {
+      const result = await provider(fullPrompt, size);
+      if (result) {
+        return res.status(200).json({ success: true, size, ...result });
       }
-
-      modelUsed = getAgnesModel();
-      const apiUrl = 'https://apihub.agnes-ai.com/v1/images/generations';
-
-      const response = await fetchWithRetry(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: modelUsed,
-          prompt,
-          size: '1024x1024'
-        })
-      });
-
-      const responseText = await response.text();
-      const data = parseJsonSafe(responseText);
-
-      if (!response.ok) {
-        const providerMessage = data?.error?.message || data?.message || responseText.slice(0, 300);
-        return res.status(response.status).json({
-          error: 'Agnes image generation request failed',
-          details: providerMessage || `HTTP ${response.status}`,
-          status: response.status
-        });
-      }
-
-      if (!data) {
-        return res.status(502).json({
-          error: 'Invalid response from Agnes API',
-          details: responseText.slice(0, 300)
-        });
-      }
-
-      imageData = extractAgnesImageData(data);
-      if (!imageData) {
-        return res.status(200).json({
-          success: false,
-          error: 'No image was returned. Try a more visual prompt.',
-          details: data?.error || null,
-          modelUsed
-        });
-      }
-    } else {
-      // Gemini Provider (fallback)
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) {
-        return res.status(500).json({ error: 'API key not configured' });
-      }
-
-      modelUsed = getGeminiModel();
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelUsed}:generateContent?key=${apiKey}`;
-
-      const response = await fetchWithRetry(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{ text: prompt }]
-          }],
-          generationConfig: {
-            responseModalities: ['TEXT', 'IMAGE']
-          }
-        })
-      });
-
-      const responseText = await response.text();
-      const data = parseJsonSafe(responseText);
-
-      if (!response.ok) {
-        const providerMessage = data?.error?.message || data?.message || responseText.slice(0, 300);
-        return res.status(response.status).json({
-          error: 'Image generation request failed',
-          details: providerMessage || `HTTP ${response.status}`,
-          status: response.status
-        });
-      }
-
-      if (!data) {
-        return res.status(502).json({
-          error: 'Invalid response from image provider',
-          details: responseText.slice(0, 300)
-        });
-      }
-
-      imageData = extractGeminiImageData(data);
-      if (!imageData) {
-        return res.status(200).json({
-          success: false,
-          error: 'No image was returned. Try a more visual prompt.',
-          details: data?.candidates?.[0]?.finishReason || null,
-          modelUsed
-        });
-      }
+    } catch (err) {
+      errors.push(err.message);
     }
-
-    return res.status(200).json({
-      success: true,
-      image: imageData.url || `data:${imageData.mimeType};base64,${imageData.data}`,
-      modelUsed
-    });
-  } catch (error) {
-    const isTimeout = error.name === 'AbortError';
-    return res.status(isTimeout ? 504 : 500).json({
-      error: isTimeout ? 'Image generation timed out' : 'Server error during image generation',
-      details: error.message
-    });
   }
+  if (!errors.length) {
+    return res.status(500).json({ error: 'No image provider configured (set NINEROUTER_API_KEY or AGNES_API_KEY)' });
+  }
+  const timedOut = errors.some(e => /abort/i.test(e));
+  return res.status(timedOut ? 504 : 502).json({
+    error: timedOut ? 'Image generation timed out' : 'Image generation failed',
+    details: errors.join(' | ')
+  });
 };

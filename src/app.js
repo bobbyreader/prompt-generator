@@ -1,489 +1,334 @@
-/* ==================== 核心逻辑模块 ==================== */
+/* 提示词工坊 v2 前端
+ * 主路：/api/prompt（Agnes 真 AI，一次出 3 个候选）；失败时用本地模板兜底并明确标注。
+ * 生图：/api/generate（服务端 9router 主路 / Agnes 兜底），前端长超时 + 已等待秒数提示。
+ */
+import { buildPromptCandidates, schemaToPrompt } from './fallback.js';
 
-import { styleEnhancers, promptTemplates, variables, enhancements } from './data.js';
-import {
-    toggleTheme, initTheme,
-    addToHistory, incrementStats, addToFavorites,
-    renderHistory, renderFavorites, updateStats,
-    deleteHistory, deleteFavorite, clearHistory, clearFavorites,
-    useHistory, useFavorite, historyToFavorite,
-    injectDeps
-} from './storage.js';
-
-// 全局状态
-let currentStyle = 'auto';
-let currentImageUrl = null;
-let currentPrompt = '';
-let isGenerating = false;
-let activeImageRequestId = 0;
-
-const TEMPLATE_STYLE_MAP = {
-    portrait: 'photography',
-    landscape: 'photography',
-    anime: 'anime',
-    cyberpunk: 'concept',
-    fantasy: 'illustration',
-    product: 'photography',
-    poster: 'concept',
-    concept: 'concept'
+const $ = id => document.getElementById(id);
+const FIELD_LABELS = {
+  purpose: '用途', subject: '主体', scene: '场景', action: '动作', style: '风格',
+  composition: '构图', lighting: '光线', mood: '情绪', details: '细节',
+  constraints: '约束', avoid: '避免'
 };
+const TEMPLATES = [
+  ['人像摄影', '一位年轻女性站在樱花树下，春风吹动发丝，浅色针织衫，温柔治愈的氛围'],
+  ['风景大片', '云海之上的雪山日出，金色阳光洒在山脊，前景有松树剪影，史诗感'],
+  ['动漫风格', '少女站在夏日海边的车站，蓝天白云，电车驶过，新海诚式清新画面'],
+  ['赛博朋克', '雨夜的未来都市街头，霓虹灯牌倒映在湿漉漉的路面，行人撑着透明雨伞'],
+  ['奇幻魔法', '漂浮在空中的古老图书馆，书页化作光蝶飞舞，一位小法师站在旋梯上'],
+  ['产品展示', '一瓶极简包装的精华液放在晨光中的大理石台面上，旁边有绿植叶片的影子'],
+  ['海报设计', '一位宇航员站在荒漠中央望向巨大的落日，画面下方留出标题空间，复古科幻海报'],
+  ['概念艺术', '深海中的废弃地铁站，鲸鱼从破裂的穹顶上方游过，光束穿透海水']
+];
 
-/* ==================== 依赖注入（解决循环依赖） ==================== */
-function showToast(message) {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 2500);
+let currentStyle = 'auto';
+let currentPurpose = '通用图片';
+let currentSize = '1024x1024';
+let candidates = [];
+let activeId = null;
+let generatingPrompt = false;
+let generatingImage = false;
+let currentImageUrl = null;
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
 }
-
-function announce(message) {
-    const el = document.getElementById('ariaAnnounce');
-    el.textContent = '';
-    requestAnimationFrame(() => { el.textContent = message; });
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+function load(key, dflt) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : dflt; } catch { return dflt; } }
+function save(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} }
 
-// 注入到 storage.js，让它调用这里的 showToast/announce/updateStats
-injectDeps({ showToast, announce, updateStats });
-
-/* ==================== 工具函数 ==================== */
-function getRandom(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function fillTemplate(template, category) {
-    return template
-        .replace('{subject}', getRandom(variables.subject[category] || variables.subject.common))
-        .replace('{lighting}', getRandom(variables.lighting))
-        .replace('{background}', getRandom(variables.background))
-        .replace('{camera}', getRandom(variables.camera))
-        .replace('{lens}', getRandom(variables.lens))
-        .replace('{mood}', getRandom(variables.mood))
-        .replace('{clothing}', getRandom(variables.clothing))
-        .replace('{pose}', getRandom(variables.pose))
-        .replace('{expression}', getRandom(variables.expression))
-        .replace('{setting}', getRandom(variables.setting))
-        .replace('{time}', getRandom(variables.time))
-        .replace('{atmosphere}', getRandom(variables.atmosphere))
-        .replace('{details}', getRandom(variables.details))
-        .replace('{action}', getRandom(variables.action))
-        .replace('{layout}', getRandom(variables.layout))
-        .replace('{typography}', getRandom(variables.typography))
-        .replace('{colors}', getRandom(variables.colors))
-        .replace('{style}', getRandom(variables.style));
-}
-
-function setActiveStyle(style) {
-    currentStyle = style;
-    document.querySelectorAll('.style-chip').forEach(chip => {
-        const isActive = chip.dataset.style === style;
-        chip.classList.toggle('active', isActive);
-        chip.setAttribute('aria-checked', isActive ? 'true' : 'false');
-        chip.tabIndex = isActive ? 0 : -1;
+/* ---------- 选项 ---------- */
+function wireChips(containerId, attr, apply) {
+  const box = $(containerId);
+  box.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      box.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      apply(chip.dataset[attr]);
     });
+  });
 }
 
-function resetImageUi() {
-    document.getElementById('imagePreview').classList.remove('show');
-    document.getElementById('imageActions').classList.remove('show');
-    document.getElementById('imageError').classList.remove('show');
-    document.getElementById('imageError').textContent = '';
+/* ---------- 候选 ---------- */
+function activeCandidate() { return candidates.find(c => c.id === activeId) || candidates[0] || null; }
+
+function renderCandidates(noteZh) {
+  const tabs = $('candidateTabs');
+  if (!candidates.length) { tabs.hidden = true; $('fieldsDetails').hidden = true; return; }
+  tabs.hidden = false;
+  tabs.innerHTML = candidates.map(c =>
+    `<button type="button" class="chip${c.id === activeId ? ' active' : ''}" data-cid="${c.id}">${escapeHtml(c.label)}</button>`
+  ).join('');
+  tabs.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => selectCandidate(chip.dataset.cid));
+  });
+  $('noteZh').textContent = noteZh || '';
+  renderActive();
 }
 
-function finishImageRequest() {
-    document.getElementById('imageLoading').classList.remove('show');
-    document.getElementById('generateImageBtn').disabled = false;
-    isGenerating = false;
+function selectCandidate(id) {
+  activeId = id;
+  document.querySelectorAll('#candidateTabs .chip').forEach(c => c.classList.toggle('active', c.dataset.cid === id));
+  renderActive();
 }
 
-async function parseGenerateResponse(response) {
-    const rawText = await response.text();
-
-    if (!rawText) {
-        return {
-            ok: response.ok,
-            data: {}
-        };
-    }
-
-    try {
-        return {
-            ok: response.ok,
-            data: JSON.parse(rawText)
-        };
-    } catch {
-        return {
-            ok: response.ok,
-            data: {
-                error: response.ok ? '服务返回了无法解析的内容' : '服务返回了非 JSON 错误响应',
-                details: rawText.slice(0, 300)
-            }
-        };
-    }
+function renderActive() {
+  const c = activeCandidate();
+  if (!c) return;
+  $('promptOutput').value = c.prompt || '';
+  $('negativeOutput').value = c.negative || '';
+  renderFields(c);
 }
 
-/* ==================== 粒子背景 ==================== */
-function createParticles() {
-    const container = document.getElementById('particles');
-    for (let i = 0; i < 25; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'particle';
-        particle.style.left = Math.random() * 100 + '%';
-        particle.style.animationDelay = Math.random() * 15 + 's';
-        particle.style.animationDuration = (10 + Math.random() * 10) + 's';
-        container.appendChild(particle);
-    }
-}
-
-/* ==================== 事件绑定 ==================== */
-function bindEvents() {
-    // 主题切换
-    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
-
-    // 风格选择
-    document.querySelectorAll('.style-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-            setActiveStyle(chip.dataset.style);
-        });
-
-        chip.addEventListener('keydown', e => {
-            const chips = Array.from(document.querySelectorAll('.style-chip'));
-            const index = chips.indexOf(chip);
-
-            if (e.key === ' ' || e.key === 'Enter') {
-                e.preventDefault();
-                setActiveStyle(chip.dataset.style);
-                return;
-            }
-
-            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') {
-                return;
-            }
-
-            e.preventDefault();
-            const direction = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
-            const nextChip = chips[(index + direction + chips.length) % chips.length];
-            setActiveStyle(nextChip.dataset.style);
-            nextChip.focus();
-        });
+function renderFields(c) {
+  const fields = c.fields || {};
+  const keys = Object.keys(FIELD_LABELS);
+  const has = keys.some(k => fields[k]);
+  $('fieldsDetails').hidden = !has;
+  if (!has) return;
+  $('fieldsGrid').innerHTML = keys.map(k => {
+    const wide = ['details', 'constraints', 'avoid'].includes(k);
+    const val = escapeHtml(fields[k] || '');
+    return `<div class="${wide ? 'wide' : ''}"><label>${FIELD_LABELS[k]}` +
+      (wide
+        ? `<textarea rows="2" data-field="${k}">${val}</textarea>`
+        : `<input type="text" data-field="${k}" value="${val}">`) +
+      `</label></div>`;
+  }).join('');
+  $('fieldsGrid').querySelectorAll('[data-field]').forEach(input => {
+    input.addEventListener('input', () => {
+      const cur = activeCandidate();
+      if (!cur) return;
+      cur.fields[input.dataset.field] = input.value;
+      cur.prompt = schemaToPrompt(cur.fields);
+      if (input.dataset.field === 'avoid') cur.negative = input.value;
+      $('promptOutput').value = cur.prompt;
+      $('negativeOutput').value = cur.negative || '';
     });
-
-    // 回车生成
-    document.getElementById('keywordInput').addEventListener('keypress', e => {
-        if (e.key === 'Enter') generatePrompt();
-    });
-
-    // 键盘快捷键
-    document.addEventListener('keydown', e => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-            e.preventDefault();
-            saveFavorite();
-        }
-        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'H') {
-            e.preventDefault();
-            clearAll();
-        }
-    });
-
-    // 模板回车支持
-    document.querySelectorAll('.template-card').forEach(card => {
-        card.addEventListener('keydown', e => {
-            if (e.key === 'Enter') card.click();
-        });
-    });
-
-    // 历史/收藏事件委托（避免内联 onclick）
-    document.addEventListener('click', e => {
-        const btn = e.target.closest('.item-btn');
-        if (!btn) return;
-        const id = parseInt(btn.dataset.id, 10);
-        const action = btn.dataset.action;
-        switch (action) {
-            case 'use': useHistory(id); break;
-            case 'fav': historyToFavorite(id); break;
-            case 'del': deleteHistory(id); break;
-            case 'useFav': useFavorite(id); break;
-            case 'delFav': deleteFavorite(id); break;
-        }
-    });
+  });
 }
 
-/* ==================== 提示词生成 ==================== */
-function generatePrompt() {
-    const keyword = document.getElementById('keywordInput').value.trim();
-    const output = document.getElementById('promptOutput');
-    const loading = document.getElementById('loading');
-
-    if (!keyword) {
-        showToast('请输入描述内容');
-        return;
-    }
-
-    loading.classList.add('show');
-
-    setTimeout(() => {
-        let prompt = '';
-
-        if (keyword) {
-            const style = currentStyle === 'auto' ? 'photography' : currentStyle;
-            const enhancers = styleEnhancers[style];
-            prompt = keyword;
-            prompt += ', ' + enhancers.common;
-
-            const extraModifiers = [];
-            const modCount = Math.floor(Math.random() * 2) + 1;
-            for (let i = 0; i < modCount; i++) {
-                extraModifiers.push(getRandom(enhancers.modifiers));
-            }
-            prompt += ', ' + extraModifiers.join(', ');
-            prompt += ', ' + getRandom(['8k ultra detailed', 'highly detailed', 'award winning quality', 'professional quality', 'masterpiece']);
-            prompt += ', ' + getRandom(['cinematic composition', 'perfect composition', 'balanced framing', 'dramatic angle']);
-        } else {
-            const templates = promptTemplates[currentStyle] || promptTemplates.portrait;
-            prompt = fillTemplate(getRandom(templates), currentStyle === 'auto' ? 'common' : currentStyle);
-        }
-
-        output.value = prompt;
-        loading.classList.remove('show');
-        showToast('提示词已生成！');
-
-        const genStyle = currentStyle === 'auto' ? 'photography' : currentStyle;
-        addToHistory(prompt, genStyle);
-        incrementStats(genStyle);
-    }, 600);
-}
-
-/* ==================== 优化润色 ==================== */
-function enhancePrompt() {
-    const output = document.getElementById('promptOutput');
-    let prompt = output.value.trim();
-
-    if (!prompt) {
-        showToast('先生成或输入提示词');
-        return;
-    }
-
-    const toAdd = [];
-    const count = Math.floor(Math.random() * 2) + 1;
-    for (let i = 0; i < count; i++) {
-        const item = getRandom(enhancements);
-        if (!toAdd.includes(item)) toAdd.push(item);
-    }
-
-    output.value = prompt + ', ' + toAdd.join(', ');
-    showToast('已优化！');
-}
-
-/* ==================== 追加增强词 ==================== */
-function addEnhancement(text) {
-    const output = document.getElementById('promptOutput');
-    if (output.value.trim()) {
-        output.value += ', ' + text;
-    } else {
-        output.value = text;
-    }
-}
-
-/* ==================== 快速添加元素 ==================== */
-function addToPrompt(text) {
-    navigator.clipboard.writeText(text);
-    showToast('已复制：' + text);
-}
-
-/* ==================== 复制提示词 ==================== */
-function copyPrompt() {
-    const output = document.getElementById('promptOutput');
-    if (!output.value.trim()) {
-        showToast('没有可复制的内容');
-        return;
-    }
-
-    navigator.clipboard.writeText(output.value).then(() => {
-        showToast('已复制到剪贴板！');
-        const btn = document.querySelector('.copy-btn');
-        btn.classList.add('copied');
-        btn.innerHTML = '<span>✓</span><span>已复制</span>';
-        setTimeout(() => {
-            btn.classList.remove('copied');
-            btn.innerHTML = '<span>📋</span><span>复制提示词</span>';
-        }, 2000);
-    });
-}
-
-/* ==================== 收藏 ==================== */
-function saveFavorite() {
-    const prompt = document.getElementById('promptOutput').value.trim();
-    if (!prompt) {
-        showToast('没有可收藏的内容');
-        return;
-    }
-    addToFavorites(prompt, currentStyle);
-    showToast('已收藏 ⭐');
-    announce('提示词已收藏');
-}
-
-/* ==================== 清空 ==================== */
-function clearAll() {
-    document.getElementById('keywordInput').value = '';
-    document.getElementById('promptOutput').value = '';
-    resetImageUi();
-    document.getElementById('generateImageBtn').disabled = false;
-    document.getElementById('generatedImage').src = '';
-    currentImageUrl = null;
-    currentPrompt = '';
-    isGenerating = false;
-    activeImageRequestId++;
-    showToast('已清空');
-}
-
-/* ==================== 模板 ==================== */
-function useTemplate(type) {
-    document.getElementById('keywordInput').value = '';
-    const displayStyle = TEMPLATE_STYLE_MAP[type] || 'auto';
-    setActiveStyle(displayStyle);
-
-    const templates = promptTemplates[type] || promptTemplates.portrait;
-    const prompt = fillTemplate(getRandom(templates), type);
-    document.getElementById('promptOutput').value = prompt;
-    addToHistory(prompt, displayStyle);
-    incrementStats(displayStyle);
-    showToast('已应用模板：' + type);
-}
-
-/* ==================== 图片生成 ==================== */
-async function generateImage() {
-    if (isGenerating) return;
-
-    const prompt = document.getElementById('promptOutput').value.trim();
-    if (!prompt) {
-        showToast('请先生成或输入提示词');
-        return;
-    }
-
-    if (prompt.length > 4000) {
-        showToast('提示词过长，请控制在 4000 字符以内');
-        return;
-    }
-
-    const generateBtn = document.getElementById('generateImageBtn');
-    const loading = document.getElementById('imageLoading');
-    const preview = document.getElementById('imagePreview');
-    const error = document.getElementById('imageError');
-    const actions = document.getElementById('imageActions');
-    const requestId = ++activeImageRequestId;
+/* ---------- 生成提示词 ---------- */
+async function generatePrompt() {
+  if (generatingPrompt) return;
+  const idea = $('ideaInput').value.trim();
+  if (!idea) { toast('先写下你的想法'); $('ideaInput').focus(); return; }
+  generatingPrompt = true;
+  const btn = $('generatePromptBtn');
+  const status = $('promptStatus');
+  btn.disabled = true;
+  btn.textContent = 'AI 生成中…';
+  status.classList.remove('error');
+  status.textContent = '正在请 AI 构思三个方向，通常几秒到几十秒…';
+  const started = Date.now();
+  try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-    resetImageUi();
-    currentImageUrl = null;
-    document.getElementById('generatedImage').src = '';
-    loading.classList.add('show');
-    generateBtn.disabled = true;
-    isGenerating = true;
-    currentPrompt = prompt;
-
-    try {
-        const response = await fetch('/api/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt }),
-            signal: controller.signal
-        });
-
-        const { ok, data } = await parseGenerateResponse(response);
-        if (requestId !== activeImageRequestId) {
-            return;
-        }
-
-        finishImageRequest();
-
-        if (!ok || data.error) {
-            const details = data.details ? `：${typeof data.details === 'string' ? data.details : JSON.stringify(data.details)}` : '';
-            error.textContent = `生成失败：${data.error || '请求未成功'}${details}`;
-            error.classList.add('show');
-            return;
-        }
-
-        if (data.image) {
-            currentImageUrl = data.image;
-            document.getElementById('generatedImage').src = data.image;
-            preview.classList.add('show');
-            actions.classList.add('show');
-            showToast('图片生成成功！');
-        } else {
-            error.textContent = '未返回图片数据，请稍后重试';
-            error.classList.add('show');
-        }
-    } catch (err) {
-        if (requestId !== activeImageRequestId) {
-            return;
-        }
-
-        finishImageRequest();
-        error.textContent = err.name === 'AbortError'
-            ? '生成超时：请稍后重试或简化提示词'
-            : '网络错误：' + err.message;
-        error.classList.add('show');
-    } finally {
-        clearTimeout(timeoutId);
-    }
+    const timer = setTimeout(() => controller.abort(), 120000);
+    const resp = await fetch('/api/prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idea, style: currentStyle, purpose: currentPurpose, size: currentSize }),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.candidates?.length) throw new Error(data.error || `HTTP ${resp.status}`);
+    candidates = data.candidates;
+    activeId = candidates[0].id;
+    renderCandidates(data.note_zh ? `AI 说明：${data.note_zh}` : '');
+    status.textContent = `已生成（AI · ${data.modelUsed || 'agnes'}，${Math.round((Date.now() - started) / 1000)} 秒）`;
+    addToHistory(idea);
+    toast('已生成 3 个候选方向');
+  } catch (err) {
+    // 本地模板兜底：明确标注，不假装是 AI
+    const local = buildPromptCandidates(idea, currentStyle, currentSize, null);
+    candidates = local.map(c => ({
+      id: c.id, label: c.label, prompt: c.prompt,
+      negative: c.schema?.avoid || '', fields: c.schema || {}
+    }));
+    activeId = candidates[0]?.id;
+    renderCandidates('');
+    status.classList.add('error');
+    status.textContent = 'AI 暂时不可用（' + (err.name === 'AbortError' ? '请求超时' : '服务异常') + '），已用本地模板生成，质量会打折，可稍后重试。';
+    addToHistory(idea);
+  } finally {
+    generatingPrompt = false;
+    btn.disabled = false;
+    btn.textContent = '生成提示词';
+  }
 }
 
-/* ==================== 下载图片 ==================== */
-function downloadImage() {
-    if (!currentImageUrl) {
-        showToast('没有可下载的图片');
-        return;
-    }
-
-    if (currentImageUrl.startsWith('data:')) {
-        const link = document.createElement('a');
-        link.href = currentImageUrl;
-        link.download = 'generated-image.png';
-        link.click();
-        showToast('图片下载中...');
-        return;
-    }
-
-    fetch(currentImageUrl)
-        .then(response => response.blob())
-        .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'generated-image.png';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            showToast('图片下载成功！');
-        })
-        .catch(() => {
-            window.open(currentImageUrl, '_blank');
-            showToast('请右键图片另存为');
-        });
+/* ---------- 生图 ---------- */
+async function generateImage() {
+  if (generatingImage) return;
+  const prompt = $('promptOutput').value.trim();
+  if (!prompt) { toast('请先生成或填写提示词'); return; }
+  generatingImage = true;
+  const btn = $('generateImageBtn');
+  const status = $('imageStatus');
+  const error = $('imageError');
+  btn.disabled = true;
+  btn.textContent = '生成中…';
+  error.classList.remove('show');
+  error.textContent = '';
+  $('imagePreview').hidden = true;
+  $('imageActions').hidden = true;
+  const started = Date.now();
+  const routeHint = currentSize === '1024x1024'
+    ? '1:1 走 9router 快速通道，通常 15–30 秒'
+    : '非方形比例走 Agnes 通道，通常 10–90 秒，波动较大';
+  status.textContent = `已提交，正在生图…（${routeHint}；已等待 0 秒）`;
+  const ticker = setInterval(() => {
+    status.textContent = `已提交，正在生图…（${routeHint}；已等待 ${Math.round((Date.now() - started) / 1000)} 秒，不要重复点击）`;
+  }, 1000);
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 300000);
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, negative: $('negativeOutput').value.trim(), size: currentSize }),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.image) throw new Error((data.error || `HTTP ${resp.status}`) + (data.details ? `：${data.details}` : ''));
+    currentImageUrl = data.image;
+    const img = $('generatedImage');
+    img.onload = () => {
+      $('imageMeta').textContent =
+        `通道：${data.provider || ''} · 模型：${data.modelUsed || ''} · 请求尺寸 ${data.size || currentSize} · 实际 ${img.naturalWidth}×${img.naturalHeight} · 耗时 ${Math.round((Date.now() - started) / 1000)} 秒`;
+    };
+    img.src = data.image;
+    $('imagePreview').hidden = false;
+    $('imageActions').hidden = false;
+    status.textContent = '图片生成成功';
+    toast('图片生成成功');
+  } catch (err) {
+    error.textContent = err.name === 'AbortError' ? '生图超时（超过 5 分钟），请稍后重试或简化提示词' : `生成失败：${err.message}`;
+    error.classList.add('show');
+    status.textContent = '';
+  } finally {
+    clearInterval(ticker);
+    generatingImage = false;
+    btn.disabled = false;
+    btn.textContent = '生成图片';
+  }
 }
 
-// 导出给 HTML onclick（事件委托处理历史/收藏按钮）
-window.generatePrompt = generatePrompt;
-window.enhancePrompt = enhancePrompt;
-window.addEnhancement = addEnhancement;
-window.addToPrompt = addToPrompt;
-window.copyPrompt = copyPrompt;
-window.saveFavorite = saveFavorite;
-window.clearAll = clearAll;
-window.useTemplate = useTemplate;
-window.generateImage = generateImage;
-window.downloadImage = downloadImage;
-window.clearHistory = clearHistory;
-window.clearFavorites = clearFavorites;
-// 历史/收藏通过事件委托，无需 window 导出
+async function downloadImage() {
+  if (!currentImageUrl) return;
+  try {
+    const resp = await fetch(currentImageUrl);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'prompt-image.png'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('图片下载中');
+  } catch {
+    window.open(currentImageUrl, '_blank');
+    toast('已在新标签打开，请右键另存');
+  }
+}
 
-/* ==================== 初始化 ==================== */
+/* ---------- 历史 / 收藏（仅本机） ---------- */
+function addToHistory(idea) {
+  const c = activeCandidate();
+  if (!c) return;
+  const items = load('kw_history', []);
+  items.unshift({
+    id: Date.now(), idea, prompt: $('promptOutput').value, negative: $('negativeOutput').value,
+    fields: c.fields || {}, style: currentStyle, size: currentSize, time: Date.now()
+  });
+  save('kw_history', items.slice(0, 50));
+  renderList('historyList', load('kw_history', []), false);
+}
+function addToFavorites() {
+  const prompt = $('promptOutput').value.trim();
+  if (!prompt) { toast('没有可收藏的内容'); return; }
+  const c = activeCandidate();
+  const items = load('kw_favorites', []);
+  items.unshift({
+    id: Date.now(), idea: $('ideaInput').value.trim(), prompt,
+    negative: $('negativeOutput').value, fields: c?.fields || {}, style: currentStyle, size: currentSize, time: Date.now()
+  });
+  save('kw_favorites', items.slice(0, 100));
+  renderList('favoritesList', load('kw_favorites', []), true);
+  toast('已收藏');
+}
+function renderList(elId, items, isFav) {
+  const box = $(elId);
+  if (!items.length) { box.innerHTML = `<div class="empty">${isFav ? '暂无收藏' : '暂无记录'}</div>`; return; }
+  box.innerHTML = items.map(it => `
+    <div class="item" data-id="${it.id}">
+      <div class="item-text">${escapeHtml(it.prompt)}</div>
+      <div class="item-meta">${escapeHtml(it.style || '')} · ${escapeHtml(it.size || '')} · ${new Date(it.time).toLocaleString('zh-CN', { hour12: false })}</div>
+    </div>`).join('');
+  box.querySelectorAll('.item').forEach(el => {
+    el.addEventListener('click', () => {
+      const it = items.find(x => String(x.id) === el.dataset.id);
+      if (!it) return;
+      candidates = [{ id: 'saved', label: '已保存', prompt: it.prompt, negative: it.negative || '', fields: it.fields || {} }];
+      activeId = 'saved';
+      if (it.idea) $('ideaInput').value = it.idea, $('charCount').textContent = it.idea.length;
+      renderCandidates('');
+      toast('已载入');
+    });
+  });
+}
+
+/* ---------- 初始化 ---------- */
 export function init() {
-    createParticles();
-    initTheme();
-    bindEvents();
-    renderHistory();
-    renderFavorites();
-    updateStats();
+  wireChips('styleChips', 'style', v => currentStyle = v);
+  wireChips('purposeChips', 'purpose', v => currentPurpose = v);
+  wireChips('sizeChips', 'size', v => currentSize = v);
+
+  $('ideaInput').addEventListener('input', e => $('charCount').textContent = e.target.value.length);
+  $('templateChips').innerHTML = TEMPLATES.map(([name, seed]) =>
+    `<button type="button" class="chip" data-seed="${escapeHtml(seed)}">${name}</button>`).join('');
+  $('templateChips').querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      $('ideaInput').value = chip.dataset.seed;
+      $('charCount').textContent = chip.dataset.seed.length;
+      generatePrompt();
+    });
+  });
+
+  $('generatePromptBtn').addEventListener('click', generatePrompt);
+  $('generateImageBtn').addEventListener('click', generateImage);
+  $('regenBtn').addEventListener('click', generateImage);
+  $('downloadBtn').addEventListener('click', downloadImage);
+  $('copyPromptBtn').addEventListener('click', async () => {
+    if (!$('promptOutput').value.trim()) return toast('没有可复制的内容');
+    await navigator.clipboard.writeText($('promptOutput').value);
+    toast('英文提示词已复制');
+  });
+  $('copyAllBtn').addEventListener('click', async () => {
+    const p = $('promptOutput').value.trim();
+    if (!p) return toast('没有可复制的内容');
+    const n = $('negativeOutput').value.trim();
+    await navigator.clipboard.writeText(n ? `${p}\n\nNegative prompt: ${n}` : p);
+    toast('已复制全部');
+  });
+  $('favoriteBtn').addEventListener('click', addToFavorites);
+  $('clearHistoryBtn').addEventListener('click', () => { save('kw_history', []); renderList('historyList', [], false); });
+  $('clearFavoritesBtn').addEventListener('click', () => { save('kw_favorites', []); renderList('favoritesList', [], true); });
+
+  const theme = load('kw_theme', 'light');
+  if (theme === 'dark') document.body.classList.add('dark');
+  $('themeToggle').textContent = document.body.classList.contains('dark') ? '切换浅色' : '切换深色';
+  $('themeToggle').addEventListener('click', () => {
+    const dark = document.body.classList.toggle('dark');
+    save('kw_theme', dark ? 'dark' : 'light');
+    $('themeToggle').textContent = dark ? '切换浅色' : '切换深色';
+  });
+
+  renderList('historyList', load('kw_history', []), false);
+  renderList('favoritesList', load('kw_favorites', []), true);
 }
