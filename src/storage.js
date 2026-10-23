@@ -3,21 +3,29 @@
 export const STORAGE_KEYS = {
     HISTORY: 'prompt_history',
     FAVORITES: 'prompt_favorites',
+    FEEDBACK: 'prompt_feedback',
+    PREFERENCES: 'prompt_preferences',
+    SNAPSHOTS: 'prompt_preference_snapshots',
     STATS: 'prompt_stats',
     THEME: 'prompt_theme'
 };
 
 const MAX_HISTORY = 50;
+const DEFAULT_IMAGE_SETTINGS = {
+    size: '1024x1024'
+};
 
 // 运行时注入，不形成循环依赖
 let _showToast = () => {};
 let _announce = () => {};
 let _updateStatsFn = () => {};
+let _applyStoredPromptItem = null;
 
-export function injectDeps({ showToast, announce, updateStats }) {
+export function injectDeps({ showToast, announce, updateStats, applyStoredPromptItem }) {
     _showToast = showToast || _showToast;
     _announce = announce || _announce;
     _updateStatsFn = updateStats || _updateStatsFn;
+    _applyStoredPromptItem = applyStoredPromptItem || _applyStoredPromptItem;
 }
 
 function load(key, defaultVal) {
@@ -33,6 +41,26 @@ function save(key, val) {
     try {
         localStorage.setItem(key, JSON.stringify(val));
     } catch {}
+}
+
+function normalizeImageSettings(settings) {
+    return {
+        ...DEFAULT_IMAGE_SETTINGS,
+        ...(settings && typeof settings === 'object' ? settings : {})
+    };
+}
+
+function normalizePromptItem(item) {
+    return {
+        ...(item || {}),
+        imageSettings: normalizeImageSettings(item?.imageSettings),
+        schema: item?.schema && typeof item.schema === 'object' ? item.schema : null
+    };
+}
+
+function formatImageSettingsMeta(item) {
+    const size = item?.imageSettings?.size;
+    return size ? ` · ${size}` : '';
 }
 
 /* ==================== 主题 ==================== */
@@ -57,9 +85,16 @@ export function updateThemeUI() {
 }
 
 /* ==================== 历史记录 ==================== */
-export function addToHistory(prompt, style) {
+export function addToHistory(promptOrItem, style, imageSettings = DEFAULT_IMAGE_SETTINGS) {
     const history = load(STORAGE_KEYS.HISTORY, []);
-    history.unshift({ text: prompt, style, time: Date.now(), id: Date.now() });
+    const baseItem = typeof promptOrItem === 'object' && promptOrItem !== null
+        ? promptOrItem
+        : { text: promptOrItem, style, imageSettings };
+    history.unshift(normalizePromptItem({
+        ...baseItem,
+        time: Date.now(),
+        id: Date.now()
+    }));
     if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
     save(STORAGE_KEYS.HISTORY, history);
     renderHistory();
@@ -73,11 +108,13 @@ export function renderHistory() {
         container.innerHTML = '<div class="empty-state">暂无历史记录</div>';
         return;
     }
-    container.innerHTML = history.map(item => `
+    container.innerHTML = history.map(rawItem => {
+        const item = normalizePromptItem(rawItem);
+        return `
         <div class="history-item">
             <div>
                 <div class="history-item-text">${escapeHtml(item.text)}</div>
-                <div class="history-item-meta">${item.style} · ${formatTime(item.time)}</div>
+                <div class="history-item-meta">${item.style}${formatImageSettingsMeta(item)}${item.schema ? ' · 已保存结构化字段' : ''} · ${formatTime(item.time)}</div>
             </div>
             <div class="item-actions">
                 <button class="item-btn use-btn" data-id="${item.id}" data-action="use">使用</button>
@@ -85,16 +122,23 @@ export function renderHistory() {
                 <button class="item-btn del-btn" data-id="${item.id}" data-action="del">×</button>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 export function useHistory(id) {
     const history = load(STORAGE_KEYS.HISTORY, []);
-    const item = history.find(h => h.id == id);
+    const item = normalizePromptItem(history.find(h => h.id == id));
     if (item) {
-        document.getElementById('promptOutput').value = item.text;
+        if (_applyStoredPromptItem) {
+            _applyStoredPromptItem(item);
+        } else {
+            document.getElementById('promptOutput').value = item.text;
+        }
         const chip = document.querySelector(`.style-chip[data-style="${item.style}"]`);
         if (chip) chip.click();
+        const sizeInput = document.querySelector(`input[name="imageSize"][value="${item.imageSettings.size}"]`);
+        if (sizeInput) sizeInput.click();
         _showToast('已加载历史提示词');
         _announce('已从历史记录加载提示词');
     }
@@ -102,9 +146,9 @@ export function useHistory(id) {
 
 export function historyToFavorite(id) {
     const history = load(STORAGE_KEYS.HISTORY, []);
-    const item = history.find(h => h.id == id);
+    const item = normalizePromptItem(history.find(h => h.id == id));
     if (item) {
-        addToFavorites(item.text, item.style);
+        addToFavorites(item);
         _showToast('已收藏');
     }
 }
@@ -125,10 +169,17 @@ export function clearHistory() {
 }
 
 /* ==================== 收藏夹 ==================== */
-export function addToFavorites(text, style) {
+export function addToFavorites(itemOrText, style, imageSettings = DEFAULT_IMAGE_SETTINGS) {
     const favorites = load(STORAGE_KEYS.FAVORITES, []);
-    if (favorites.some(f => f.text === text)) return;
-    favorites.unshift({ text, style, time: Date.now(), id: Date.now() });
+    const baseItem = typeof itemOrText === 'object' && itemOrText !== null
+        ? itemOrText
+        : { text: itemOrText, style, imageSettings };
+    if (favorites.some(f => f.text === baseItem.text)) return;
+    favorites.unshift(normalizePromptItem({
+        ...baseItem,
+        time: Date.now(),
+        id: Date.now()
+    }));
     save(STORAGE_KEYS.FAVORITES, favorites);
     renderFavorites();
 }
@@ -140,24 +191,34 @@ export function renderFavorites() {
         container.innerHTML = '<div class="empty-state">暂无收藏</div>';
         return;
     }
-    container.innerHTML = favorites.map(item => `
+    container.innerHTML = favorites.map(rawItem => {
+        const item = normalizePromptItem(rawItem);
+        return `
         <div class="favorite-item">
             <div class="favorite-item-text">${escapeHtml(item.text)}</div>
+            <div class="history-item-meta">${item.style}${formatImageSettingsMeta(item)}${item.schema ? ' · 已保存结构化字段' : ''}</div>
             <div class="item-actions">
                 <button class="item-btn use-btn" data-id="${item.id}" data-action="useFav">使用</button>
                 <button class="item-btn del-btn" data-id="${item.id}" data-action="delFav">×</button>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 export function useFavorite(id) {
     const favorites = load(STORAGE_KEYS.FAVORITES, []);
-    const item = favorites.find(f => f.id == id);
+    const item = normalizePromptItem(favorites.find(f => f.id == id));
     if (item) {
-        document.getElementById('promptOutput').value = item.text;
+        if (_applyStoredPromptItem) {
+            _applyStoredPromptItem(item);
+        } else {
+            document.getElementById('promptOutput').value = item.text;
+        }
         const chip = document.querySelector(`.style-chip[data-style="${item.style}"]`);
         if (chip) chip.click();
+        const sizeInput = document.querySelector(`input[name="imageSize"][value="${item.imageSettings.size}"]`);
+        if (sizeInput) sizeInput.click();
         _showToast('已加载收藏');
         _announce('已从收藏加载提示词');
     }
@@ -174,6 +235,121 @@ export function clearFavorites() {
     save(STORAGE_KEYS.FAVORITES, []);
     renderFavorites();
     _showToast('收藏已清空');
+}
+
+/* ==================== 偏好反馈 ==================== */
+export function addPromptFeedback(feedback) {
+    const items = load(STORAGE_KEYS.FEEDBACK, []);
+    items.unshift({
+        ...feedback,
+        id: Date.now(),
+        time: Date.now()
+    });
+    if (items.length > MAX_HISTORY) {
+        items.length = MAX_HISTORY;
+    }
+    save(STORAGE_KEYS.FEEDBACK, items);
+}
+
+export function getPromptFeedback() {
+    return load(STORAGE_KEYS.FEEDBACK, []);
+}
+
+const DEFAULT_PREFERENCES = {
+    general: '',
+    product: '',
+    cover: '',
+    poster: '',
+    pet: '',
+    portrait: ''
+};
+
+export function getPromptPreferences() {
+    return {
+        ...DEFAULT_PREFERENCES,
+        ...load(STORAGE_KEYS.PREFERENCES, DEFAULT_PREFERENCES)
+    };
+}
+
+export function savePromptPreferences(preferences) {
+    save(STORAGE_KEYS.PREFERENCES, {
+        ...DEFAULT_PREFERENCES,
+        ...(preferences && typeof preferences === 'object' ? preferences : {})
+    });
+}
+
+export function clearPromptFeedback() {
+    save(STORAGE_KEYS.FEEDBACK, []);
+}
+
+export function getPreferenceSnapshots() {
+    const snapshots = load(STORAGE_KEYS.SNAPSHOTS, []);
+    return Array.isArray(snapshots)
+        ? snapshots
+            .filter(item => item && typeof item === 'object' && typeof item.name === 'string')
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        : [];
+}
+
+export function savePreferenceSnapshot(name, preferences = getPromptPreferences()) {
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
+    if (!normalizedName) {
+        throw new Error('Snapshot name is required');
+    }
+
+    const snapshots = getPreferenceSnapshots();
+    const existing = snapshots.find(item => item.name === normalizedName);
+    const now = Date.now();
+    const payload = {
+        id: existing?.id || now,
+        name: normalizedName,
+        preferences: {
+            ...DEFAULT_PREFERENCES,
+            ...(preferences && typeof preferences === 'object' ? preferences : {})
+        },
+        createdAt: existing?.createdAt || now,
+        updatedAt: now
+    };
+
+    const nextSnapshots = existing
+        ? snapshots.map(item => (item.name === normalizedName ? payload : item))
+        : [payload, ...snapshots];
+
+    save(STORAGE_KEYS.SNAPSHOTS, nextSnapshots);
+    return payload;
+}
+
+export function deletePreferenceSnapshot(snapshotId) {
+    const snapshots = getPreferenceSnapshots().filter(item => String(item.id) !== String(snapshotId));
+    save(STORAGE_KEYS.SNAPSHOTS, snapshots);
+}
+
+export function getPreferenceSnapshot(snapshotId) {
+    return getPreferenceSnapshots().find(item => String(item.id) === String(snapshotId)) || null;
+}
+
+export function exportPreferenceBundle() {
+    return {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        preferences: getPromptPreferences(),
+        feedback: getPromptFeedback(),
+        snapshots: getPreferenceSnapshots()
+    };
+}
+
+export function importPreferenceBundle(bundle) {
+    if (!bundle || typeof bundle !== 'object') {
+        throw new Error('Invalid preference bundle');
+    }
+
+    savePromptPreferences(bundle.preferences || {});
+
+    const feedback = Array.isArray(bundle.feedback) ? bundle.feedback : [];
+    save(STORAGE_KEYS.FEEDBACK, feedback);
+
+    const snapshots = Array.isArray(bundle.snapshots) ? bundle.snapshots : [];
+    save(STORAGE_KEYS.SNAPSHOTS, snapshots);
 }
 
 /* ==================== 使用统计 ==================== */
@@ -227,4 +403,3 @@ export function formatTime(ts) {
     if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
     return new Date(ts).toLocaleDateString('zh-CN');
 }
-

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucky Girl的专家提示词系统</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/src/styles.css">
+    <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
     <div aria-live="polite" aria-atomic="true" id="ariaAnnounce" class="sr-only"></div>
@@ -55,8 +55,31 @@
                     <span>⚡</span><span>生成提示词</span>
                 </button>
 
+                <button class="ai-wizard-btn" onclick="startAIWizard()" aria-label="AI 智能增强">
+                    <span>🤖</span><span>AI 智能共创</span>
+                </button>
+
                 <div class="loading" id="loading" role="status" aria-live="polite">
                     <div class="spinner"></div><span>正在生成...</span>
+                </div>
+
+                <div class="ai-wizard-panel" id="aiWizardPanel" style="display: none;">
+                    <div class="wizard-header">
+                        <span class="wizard-step" id="wizardStep">第一步</span>
+                        <button class="wizard-close" onclick="closeAIWizard()" aria-label="关闭">×</button>
+                    </div>
+                    <div class="wizard-content" id="wizardContent">
+                        <p class="wizard-question" id="wizardQuestion"></p>
+                        <input type="text" class="wizard-input" id="wizardInput"
+                               placeholder="输入你的回答..." aria-label="回答问题" />
+                        <div class="wizard-buttons">
+                            <button class="wizard-skip" onclick="skipWizard()">跳过，直接生成</button>
+                            <button class="wizard-submit" onclick="submitWizardAnswer()">继续</button>
+                        </div>
+                    </div>
+                    <div class="wizard-loading" id="wizardLoading" style="display: none;">
+                        <div class="spinner"></div><span>AI 思考中...</span>
+                    </div>
                 </div>
 
                 <div class="enhancement-panel">
@@ -85,6 +108,183 @@
                               aria-label="提示词输出区域"></textarea>
                 </div>
 
+                <div class="prompt-schema-panel" id="promptSchemaPanel" hidden>
+                    <div class="prompt-schema-head">
+                        <div>
+                            <div class="prompt-schema-title">结构化控制台</div>
+                            <p class="prompt-schema-subtitle">先把创意拆成可控字段，再自动回写成英文提示词。</p>
+                        </div>
+                    </div>
+                    <p class="schema-summary" id="schemaSummary"></p>
+                    <div class="prompt-schema-grid">
+                        <label class="schema-field">
+                            <span>用途</span>
+                            <input type="text" data-schema-field="purpose" placeholder="如：social media visual" />
+                        </label>
+                        <label class="schema-field">
+                            <span>主体</span>
+                            <input type="text" data-schema-field="subject" placeholder="主体是什么" />
+                        </label>
+                        <label class="schema-field">
+                            <span>场景</span>
+                            <input type="text" data-schema-field="scene" placeholder="场景与环境" />
+                        </label>
+                        <label class="schema-field">
+                            <span>动作</span>
+                            <input type="text" data-schema-field="action" placeholder="动作或画面状态" />
+                        </label>
+                        <label class="schema-field">
+                            <span>风格</span>
+                            <input type="text" data-schema-field="style" placeholder="如：cinematic photography" />
+                        </label>
+                        <label class="schema-field">
+                            <span>构图</span>
+                            <input type="text" data-schema-field="composition" placeholder="机位、视角、留白" />
+                        </label>
+                        <label class="schema-field">
+                            <span>光线</span>
+                            <input type="text" data-schema-field="lighting" placeholder="光线方向与质感" />
+                        </label>
+                        <label class="schema-field">
+                            <span>情绪</span>
+                            <input type="text" data-schema-field="mood" placeholder="想传达的氛围" />
+                        </label>
+                        <label class="schema-field schema-field-wide">
+                            <span>细节</span>
+                            <textarea data-schema-field="details" rows="2" placeholder="最重要的材质、细节和视觉线索"></textarea>
+                        </label>
+                        <label class="schema-field schema-field-wide">
+                            <span>约束</span>
+                            <textarea data-schema-field="constraints" rows="2" placeholder="哪些元素必须保留或保持克制"></textarea>
+                        </label>
+                        <label class="schema-field schema-field-wide">
+                            <span>避免</span>
+                            <textarea data-schema-field="avoid" rows="2" placeholder="不要出现什么"></textarea>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="candidate-panel" id="candidatePanel" hidden>
+                    <div class="candidate-panel-head">
+                        <div>
+                            <div class="candidate-title">候选方向</div>
+                            <p class="candidate-subtitle">先选一个最接近你审美的方向，再继续微调。</p>
+                        </div>
+                    </div>
+                    <div class="candidate-explain">
+                        <strong id="candidateExplainBadge">默认策略</strong>
+                        <span id="candidateExplainText">当前没有足够偏好数据，按默认候选策略排序。</span>
+                    </div>
+                    <div class="candidate-list" id="candidateList"></div>
+                    <div class="candidate-feedback">
+                        <label class="input-label" for="candidateFeedbackInput">为什么你更偏好当前候选</label>
+                        <input id="candidateFeedbackInput" class="keyword-input" type="text" placeholder="例如：留白更高级、主体更突出、适合封面" />
+                        <button class="action-btn enhance-btn" onclick="saveCandidateFeedback()" aria-label="保存偏好反馈">
+                            <span>🧠</span><span>保存偏好反馈</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="preference-panel" id="preferencePanel">
+                    <div class="candidate-panel-head">
+                        <div>
+                            <div class="candidate-title">偏好面板</div>
+                            <p class="candidate-subtitle">直接指定不同场景默认偏向哪个候选方向。</p>
+                        </div>
+                    </div>
+                    <div class="preference-grid">
+                        <label class="preference-field">
+                            <span>全局默认</span>
+                            <select id="pref-general">
+                                <option value="">自动学习</option>
+                                <option value="balanced">平衡版</option>
+                                <option value="bold">冲击版</option>
+                                <option value="clean">克制版</option>
+                            </select>
+                        </label>
+                        <label class="preference-field">
+                            <span>产品图</span>
+                            <select id="pref-product">
+                                <option value="">自动学习</option>
+                                <option value="balanced">平衡版</option>
+                                <option value="bold">冲击版</option>
+                                <option value="clean">克制版</option>
+                            </select>
+                        </label>
+                        <label class="preference-field">
+                            <span>封面图</span>
+                            <select id="pref-cover">
+                                <option value="">自动学习</option>
+                                <option value="balanced">平衡版</option>
+                                <option value="bold">冲击版</option>
+                                <option value="clean">克制版</option>
+                            </select>
+                        </label>
+                        <label class="preference-field">
+                            <span>海报图</span>
+                            <select id="pref-poster">
+                                <option value="">自动学习</option>
+                                <option value="balanced">平衡版</option>
+                                <option value="bold">冲击版</option>
+                                <option value="clean">克制版</option>
+                            </select>
+                        </label>
+                        <label class="preference-field">
+                            <span>宠物图</span>
+                            <select id="pref-pet">
+                                <option value="">自动学习</option>
+                                <option value="balanced">平衡版</option>
+                                <option value="bold">冲击版</option>
+                                <option value="clean">克制版</option>
+                            </select>
+                        </label>
+                        <label class="preference-field">
+                            <span>人像图</span>
+                            <select id="pref-portrait">
+                                <option value="">自动学习</option>
+                                <option value="balanced">平衡版</option>
+                                <option value="bold">冲击版</option>
+                                <option value="clean">克制版</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="preference-actions">
+                        <button class="action-btn enhance-btn" onclick="savePreferencePanel()" aria-label="保存偏好设置">
+                            <span>💾</span><span>保存偏好设置</span>
+                        </button>
+                        <button class="action-btn clear-btn" onclick="resetPreferencePanel()" aria-label="重置偏好设置">
+                            <span>↺</span><span>重置为自动学习</span>
+                        </button>
+                    </div>
+                    <div class="snapshot-panel">
+                        <label class="input-label" for="preferenceSnapshotName">保存成风格人格</label>
+                        <div class="snapshot-create-row">
+                            <input id="preferenceSnapshotName" class="keyword-input snapshot-input" type="text" placeholder="例如：商业极简、小红书冲击、治愈宠物" />
+                            <button class="action-btn enhance-btn snapshot-save-btn" onclick="savePreferenceSnapshotFromPanel()" aria-label="保存风格人格">
+                                <span>🧬</span><span>保存人格</span>
+                            </button>
+                        </div>
+                        <div class="snapshot-list" id="preferenceSnapshotList">
+                            <div class="empty-state">还没有保存的人格快照</div>
+                        </div>
+                    </div>
+                    <div class="preference-tools">
+                        <label class="input-label" for="preferenceBundleInput">偏好数据导入 / 导出</label>
+                        <textarea id="preferenceBundleInput" class="prompt-textarea preference-textarea" placeholder="点击“导出偏好数据”获取 JSON，或把之前导出的 JSON 粘贴到这里再导入。"></textarea>
+                        <div class="preference-actions">
+                            <button class="action-btn enhance-btn" onclick="exportPreferenceBundleToClipboard()" aria-label="导出偏好数据">
+                                <span>📤</span><span>导出偏好数据</span>
+                            </button>
+                            <button class="action-btn enhance-btn" onclick="importPreferenceBundleFromInput()" aria-label="导入偏好数据">
+                                <span>📥</span><span>导入偏好数据</span>
+                            </button>
+                            <button class="action-btn clear-btn" onclick="clearLearningData()" aria-label="清空学习数据">
+                                <span>🧹</span><span>清空学习数据</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="action-buttons" role="toolbar" aria-label="提示词操作">
                     <button class="action-btn copy-btn" onclick="copyPrompt()" aria-label="复制提示词">
                         <span>📋</span><span>复制提示词</span>
@@ -101,6 +301,49 @@
                 </div>
 
                 <div class="image-section" aria-label="图片生成">
+                    <div class="image-settings" aria-labelledby="imageSettingsLabel">
+                        <div class="image-settings-head">
+                            <label class="input-label" id="imageSettingsLabel">图片比例与尺寸</label>
+                            <span class="image-settings-hint">当前生产默认走 Agnes，建议按用途选择比例</span>
+                        </div>
+                        <div class="image-recommendation" aria-live="polite">
+                            <strong id="imageRecommendationLabel">推荐构图：方图通用</strong>
+                            <span id="imageRecommendationDetail">centered composition, stable focal point, balanced negative space on all sides</span>
+                        </div>
+                        <div class="image-size-grid" role="radiogroup" aria-label="图片尺寸">
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="1024x1024" checked />
+                                <span class="image-size-title">1:1 方图</span>
+                                <span class="image-size-meta">1024 × 1024</span>
+                                <span class="image-size-desc">头像、商品主图、通用社媒图</span>
+                            </label>
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="1536x1024" />
+                                <span class="image-size-title">3:2 横图</span>
+                                <span class="image-size-meta">1536 × 1024</span>
+                                <span class="image-size-desc">横版封面、场景图、海报横图</span>
+                            </label>
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="1024x1536" />
+                                <span class="image-size-title">2:3 竖图</span>
+                                <span class="image-size-meta">1024 × 1536</span>
+                                <span class="image-size-desc">人物海报、手机壁纸、封面图</span>
+                            </label>
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="1536x864" />
+                                <span class="image-size-title">16:9 横屏</span>
+                                <span class="image-size-meta">1536 × 864</span>
+                                <span class="image-size-desc">视频封面、演示横幅、头图</span>
+                            </label>
+                            <label class="image-size-card">
+                                <input type="radio" name="imageSize" value="864x1536" />
+                                <span class="image-size-title">9:16 竖屏</span>
+                                <span class="image-size-meta">864 × 1536</span>
+                                <span class="image-size-desc">短视频、小红书、手机长图</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <button class="generate-image-btn" onclick="generateImage()" id="generateImageBtn"
                             aria-label="使用 AI 生成图片">
                         <span>🎨</span><span>生成图片</span>
@@ -201,7 +444,7 @@
     <div class="toast" id="toast">已复制到剪贴板！</div>
 
     <script type="module">
-        import { init } from '/src/app.js';
+        import { init } from './src/app.js';
         init();
     </script>
 </body>
