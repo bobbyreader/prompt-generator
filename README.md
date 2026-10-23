@@ -24,7 +24,7 @@
 | 变量 | 必需 | 说明 |
 |---|---|---|
 | `AGNES_API_KEY` | 是 | 提示词生成 + Agnes 生图兜底 |
-| `NINEROUTER_API_KEY` | 是（方图快速通道） | 9router 远程访问 Key；未配置时生图全走 Agnes |
+| `NINEROUTER_API_KEY` | 是（方图快速通道） | 9router 远程访问 Key；未配置时生图全走 Agnes。2026-10-24 已在 Vercel Production 添加 |
 | `NINEROUTER_BASE_URL` | 否 | 默认 `https://ai.leobobby.dpdns.org/v1` |
 | `IMAGE_MODEL` | 否 | 默认 `ag/gemini-3.8-flash-high` |
 | `AGNES_MODEL` | 否 | 默认 `agnes-3.0-flash` |
